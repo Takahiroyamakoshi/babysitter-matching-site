@@ -1,0 +1,12 @@
+# Project
+- case_id: initial-local-mvp
+- purpose: 通常の登録・検索・チャット・正式依頼・承認をローカルの合成データで検証できるアプリを作る。
+- repository: /home/takahiro/project/babysitter-matching（開始時Git未初期化）
+- environment: Windows + WSL Ubuntu。ループバック限定、合成データ。
+- design_references: docs/design/REQUIREMENTS.md v0.44; docs/design/IMPLEMENTATION.md
+- execution_request: 2026-10-17 通常機能の実装開始についてユーザーから「お願い」。細部の設計は委任済み。
+- allowed_operations: 当該ワークスペースのコード・文書作成、ローカル実行・検証、必要な無償開発依存の導入、ローカルGit初期化・コミット。外部契約・本番公開・メール実送信・決済実行・実個人情報の取得は対象外。
+- allowed_test_data: 合成利用者・合成資格条件・合成予約のみ。
+- production_trigger_on_merge: リモート未設定。マージ・公開は未実施。
+- human_plan_check: 登録・検索・チャット・予約から開始する方針を提示し、ユーザーが実行依頼済み。実装範囲が広がる場合は確認する。
+- user_decisions: 運営AI詳細は後続。病児・投薬補助は受付無効。最大3人は条件付き。

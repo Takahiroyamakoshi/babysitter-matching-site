@@ -1,0 +1,13 @@
+# Verification
+- requirement_id:
+- specification_revision:
+- target_commit:
+- revision_record:
+- stage: task / integrated / whole-product
+- environment / time:
+- command_or_steps:
+- inputs / expected:
+- actual:
+- verdict: pass / fail / untested
+- evidence_paths:
+- limitations:
