@@ -40,6 +40,8 @@ Tests cover server-derived prices/night decomposition, eligibility, disabled ser
 
 ## Own profiles and availability
 
+Demo registration uses a labeled display-name form in each role's card, including in the embedded preview. Successful registration opens that new user's own editor; submitting twice while registration is in flight is blocked.
+
 Navigation follows the selected role. Guardians edit their own synthetic name/region and up to twelve saved children, then explicitly select a child in the common search/consultation/estimate conditions (or keep manual birth-date entry). Request conditions remain limited to three children; duplicate saved-child selection is refused. Updating a saved child's profile does not silently change an open request condition or a sent request.
 
 Sitters edit their own rate and weekly/date availability without changing review permissions. New sitters remain pending even after settings are saved. Current availability is checked at search, request creation and approval; closing a day does not cancel confirmed bookings. Pending and confirmed prices/child conditions stay as sent. A new formal request sends the displayed estimate's rate as expectedRate; a changed rate returns 409 PRICE_CHANGED, keeps the conversation/input and requires a new estimate and consent.

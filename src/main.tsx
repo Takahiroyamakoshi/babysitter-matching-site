@@ -93,6 +93,8 @@ function App() {
   const [requestOp,setRequestOp]=useState(id()),[acknowledged,setAcknowledged]=useState<Record<string,boolean>>({});
   const [sending,setSending]=useState(false),[calculating,setCalculating]=useState(false),[searching,setSearching]=useState(false);
   const [error,setError]=useState(''),[notice,setNotice]=useState('');
+  const [registrationNames,setRegistrationNames]=useState({guardian:'',sitter:''}),[registrationBusy,setRegistrationBusy]=useState(false);
+  const registrationPending=useRef(false),registrationDraftRef=useRef({guardian:id(),sitter:id()});
   const guard=useRef(new QuoteGuard()),errorRef=useRef<HTMLDivElement>(null),contextRef=useRef(''),conversationRef=useRef(''),actorRef=useRef(actor),searchEpoch=useRef(0);
   const actionOps=useRef<Record<string,string>>({}),actionGuard=useRef(new ActionGuard()),messageDraftRef=useRef(messageOp),requestDraftRef=useRef(requestOp),viewRef=useRef(tab);
   messageDraftRef.current=messageOp;requestDraftRef.current=requestOp;viewRef.current=tab;
@@ -121,7 +123,7 @@ function App() {
   const invalidate=()=>{guard.current.invalidate();setEstimate(invalidateEstimate<Quote>());const op=id();requestDraftRef.current=op;setRequestOp(op);setCalculating(false)};
   const updateConditions=(next:Conditions)=>{invalidate();searchEpoch.current++;setSearching(false);setConditions(next);setSitters([]);setSearched(false);setError('');setNotice('条件を変更しました。概算と確認チェックを更新してください。')};
   const updateFilters=(next:Filters)=>{invalidate();searchEpoch.current++;setSearching(false);setFilters(next);setSitters([]);setSearched(false);setError('');setNotice('')};
-  const switchActor=(next:string)=>{invalidate();searchEpoch.current++;setSearching(false);actorRef.current=next;conversationRef.current='';actionGuard.current.invalidate();setSending(false);setActor(next);ownRef.current=null;setOwn(null);setAcknowledged({});setConditions({start:dateValue(7,10),end:dateValue(7,13),birthDates:['']});setSelected(null);setMessages([]);setMessage('');setRequests([]);setSitters([]);setSearched(false);setTransport('');setTab(users.find(u=>u.id===next)?.role==='sitter'?'requests':'search');setError('');setNotice('');setMessageOp(id())};
+  const switchActor=(next:string)=>{invalidate();searchEpoch.current++;setSearching(false);actorRef.current=next;conversationRef.current='';actionGuard.current.invalidate();setSending(false);setActor(next);setRegistrationNames({guardian:'',sitter:''});registrationDraftRef.current={guardian:id(),sitter:id()};ownRef.current=null;setOwn(null);setAcknowledged({});setConditions({start:dateValue(7,10),end:dateValue(7,13),birthDates:['']});setSelected(null);setMessages([]);setMessage('');setRequests([]);setSitters([]);setSearched(false);setTransport('');setTab(users.find(u=>u.id===next)?.role==='sitter'?'requests':'search');setError('');setNotice('');setMessageOp(id())};
   const openSitter=(sitter:Sitter,guardian='guardian-demo')=>{
     invalidate();setSelected(sitter);setMessages([]);setConversationGuardian(isSitter?guardian:actor);setTransport('');setTab('consult');setError('');setNotice('');setMessageOp(id());
   };
@@ -177,15 +179,16 @@ function App() {
   };
   const saveOwn=(user:OwnUser)=>{if(actorRef.current!==user.id||ownRef.current&&ownRef.current.id===user.id&&ownRef.current.profileRevision>user.profileRevision)return;ownRef.current=user;setOwn(user);setUsers(old=>old.map(u=>u.id===user.id?{...u,name:user.name,...(user.role==='sitter'?{rate:user.rate,region:user.region}: {})}:u))};
   const register=async(role:'guardian'|'sitter')=>{
-    const name=prompt('合成用の表示名を入力してください');if(!name)return;
-    const target=actor,ticket=actionGuard.current.begin(actor+'|'+tab);setSending(true);setError('');
-    const current=()=>actionGuard.current.current(ticket,actorRef.current+'|'+viewRef.current);
+    const name=registrationNames[role].trim();if(!name||registrationPending.current)return;
+    registrationPending.current=true;setRegistrationBusy(true);
+    const target=actor,ticket=actionGuard.current.begin(actor+'|'+tab,registrationDraftRef.current[role]);setSending(true);setError('');
+    const current=()=>actionGuard.current.sameDraft(ticket,actorRef.current+'|'+viewRef.current,registrationDraftRef.current[role]);
     try{
       const data=await api('/api/register',actor,{method:'POST',body:JSON.stringify({role,name})});
       if(!current())return;await refresh(target);if(!current())return;
       switchActor(data.user.id);setOwn(data.user);setTab('profile');setNotice(data.notice);
     }catch(e:any){if(current())setError(e.message)}
-    finally{if(actionGuard.current.finish(ticket))setSending(false)}
+    finally{registrationPending.current=false;setRegistrationBusy(false);if(actionGuard.current.finish(ticket))setSending(false)}
   };
   const title=tab==='search'?(isSitter?'シッターの掲載を見る':'シッターを探す'):tab==='consult'?(selected?.name+'さんに相談'):tab==='request'?'保育料の概算を確認':tab==='requests'?(isSitter?'届いた依頼を確認':'予約・依頼を確認'):tab==='profile'?(isSitter?'自分のプロフィール':'お子さま・プロフィール'):tab==='settings'?'料金・空き時間':'合成デモに登録';
   const validEstimate=estimate.quote&&estimate.quoteKey===currentKey?estimate.quote:null;
@@ -226,7 +229,14 @@ function App() {
     {tab==='profile'&&own&&<ProfilePanel key={actor} user={own} onSaved={saveOwn}/>}
     {tab==='settings'&&isSitter&&own&&<SettingsEditor key={actor} user={own} onSaved={saveOwn}/>}
     {isSitter&&(tab==='requests'||tab==='profile')&&<section className="card"><h2>自分の掲載プレビュー・相談</h2><p>{own?.name} / {own?.region} / {own?.rate?yen(own.rate):''}（1人・1時間）</p><p>{own?.listingReady?'合成審査確認済み・掲載可':'合成確認待ち・掲載と受付はできません'}</p><button onClick={()=>{const sitter=users.find(u=>u.id===actor);if(sitter)openSitter(sitter as Sitter)}}>保護者との相談を開く</button></section>}
-    {tab==='account'&&<section className="grid"><div className="card"><h2>保護者の合成登録</h2><p>実情報なしで表示名だけを登録します。</p><button disabled={sending} onClick={()=>register('guardian')}>合成保護者を登録</button></div><div className="card"><h2>シッターの合成登録</h2><p>資格・研修・届出・初回保険の合成確認待ちとして登録します。自己申告で掲載や受付はできません。</p><button disabled={sending} onClick={()=>register('sitter')}>合成シッターを登録</button></div></section>}
+    {tab==='account'&&<section className="grid">{(['guardian','sitter'] as const).map(role=><form className="card form" key={role} onSubmit={e=>{e.preventDefault();register(role)}}>
+      <h2>{role==='guardian'?'保護者':'シッター'}の合成登録</h2>
+      <p>{role==='guardian'?'実情報なしで表示名だけを登録します。':'資格・研修・届出・初回保険の合成確認待ちとして登録します。自己申告で掲載や受付はできません。'}</p>
+      <fieldset className="editor-fields" disabled={registrationBusy}>
+        <label htmlFor={'register-'+role+'-name'}>{role==='guardian'?'保護者':'シッター'}の合成表示名<input id={'register-'+role+'-name'} value={registrationNames[role]} required maxLength={40} onChange={e=>{registrationDraftRef.current[role]=id();setRegistrationNames(old=>({...old,[role]:e.target.value}));setError('');setNotice('')}}/></label>
+        <button type="submit" disabled={registrationBusy||!registrationNames[role].trim()}>{registrationBusy?'登録中…':role==='guardian'?'合成保護者を登録':'合成シッターを登録'}</button>
+      </fieldset>
+    </form>)}</section>}
     <footer className="footer">ローカル合成デモ ・ 本人確認・メール・決済・病児対応なし</footer>
   </main>;
 }

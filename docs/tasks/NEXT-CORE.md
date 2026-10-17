@@ -1,9 +1,9 @@
 # Next core increment
 - id: next-core
 - state: verifying
-- state_version: 4
-- trial: S01
-- failed_submissions: 0
+- state_version: 6
+- trial: S02
+- failed_submissions: 1
 - authorization: user explicitly requested continued implementation after quarter-hour fix. Ordinary design delegated; proceed local synthetic functionality.
 - scope_candidate: role-appropriate navigation, own child/profile management, sitter rate/availability management connected to search and request acceptance. Planner to prioritize a coherent bounded increment from current requirements.
 - constraints: existing UI accepted; preserve 15-minute input and search/chat/estimate behavior. No production auth, real PII/documents, payments, external email, deploy/push/PR, destructive reset/delete.
@@ -102,3 +102,15 @@
 - state: verifying; trial S01
 - implementation_report: typecheck/build/24 tests PASS; raw evidence and source freeze pending.
 - next_action: clean fixed-source capture; independent API and parent CUA before artifact final review.
+
+## Parent transition v5 - S02 registration UI
+- S01 finalcandidate 93660420a0e6c894de3e1438782258340aa067a0 passed independentAPI11groups (one test-oracle correction) and currentprofile/children/pricing/availability/approval CUA.
+- NC01 mandatory registration CUA blocked: native window.prompt is cancelled in provided IAB (click completes, getJsDialog undefined, no registration). Not declaring this unverified flow passed.
+- bounded fix: replace native prompt with labeled inline synthetic displayname form in existing demo-registration view. Keep domain/API andguards.
+- failed_submissions:1 (one incomplete browser acceptance submission, not one per earlier prefreezecomment).
+- test carry: independent API evidence maycarry onlyafterconfirmedunchangedAPI/domain diff/hash. Source/UI checks onS02.
+
+## Parent transition v6
+- S02 inline registration form implemented; typecheck/build/26 tests reportedPASS.
+- awaiting clean S02 source capture; then actual registration and own-editor/full request browser flow.
+- S01 independentAPI11groups carry requires API/domain hash unchanged; raworaclecorrection retained.
