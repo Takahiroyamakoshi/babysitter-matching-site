@@ -5,8 +5,8 @@
 - dependencies: REQUIREMENTS.md v0.45; IMPLEMENTATION.md v0.2; UX-REFRESH設計の独立監査
 - acceptance_and_verification: 下表。同一ソース版へ実装・試験・画面証拠を紐づける。
 - assigned_agent: 実装担当 → 親の実ブラウザー検証 → 独立成果物レビュー
-- state: verifying
-- state_version: 2
+- state: complete
+- state_version: 3
 - updated_at_utc: 2026-10-17
 - revision_record: v0.2。要件v0.45第30章のIDへ統一。独立設計・計画監査 v0.2 PASSに基づく実装タスク。
 - cycle: initial
@@ -32,7 +32,7 @@ T1/T2を分担する場合は型/API契約を先に確定。他担当の編集�
 
 ## Current / resume
 - last_verified_progress: UX01〜09の設計/タスクが独立監査PASS。公開競合監査と現行APIの最低時間エラーを確認。検索の例外吸収・同一DOB複製・保護者への手取り表示・固定交通費を現行コードで確認。
-- remaining: T1/T2実装、T3検証、T4成果物レビュー。
+- remaining: 今回のUX01〜09は完了。後続範囲は設計資料を参照。
 - child_or_process_state: 計画担当は子/ブラウザー/アプリを起動していない。
 - uncertain_external_operations: なし。公開競合観測は親、外部書込みなし。
 - next_check: 実装担当の固定版を受領し、独立API検証と親の実ブラウザー検証へ渡す。
@@ -40,7 +40,7 @@ T1/T2を分担する場合は型/API契約を先に確定。他担当の編集�
 
 ## Acceptance / reviews
 - v0.2: 独立設計・計画監査PASS。実装の合格は未判定。既存L01〜L08を緩めない。
-- source / tested_revision / evidence: 未提出。
+- source / tested_revision / evidence: 46985e12b04024ac4761bff256580c0c702c7a20 / evidence/ux-refresh/S01/revision.json; 検証・成果物レビューPASS。
 
 ## Interventions / timing
 - 2026-10-17: 親から局所改善/公開競合参照/交通費二段階/既存保証維持を受領、UX01〜09へ具体化。
@@ -56,3 +56,13 @@ T1/T2を分担する場合は型/API契約を先に確定。他担当の編集�
 - implementation_report: typecheck/build/17 tests PASS reported; final source commit/capture pending
 - remaining: independent API checks, parent CUA desktop/mobile checks, artifact review
 - transitioned_at_utc: 2026-10-17T04:33:04.532633+00:00
+
+## UX refresh completion
+- source_revision: 46985e12b04024ac4761bff256580c0c702c7a20
+- trial: S01; failed_submissions: 0
+- completed: UX01-UX09; typecheck/build/17 unit tests PASS; independent API10 groups/62 HTTP PASS; parent CUA desktop/mobile PASS; independent artifact review PASS.
+- acceptance_evidence: docs/verification/UX-REFRESH.md; docs/reviews/UX-REFRESH.md; docs/design/UX-AUDIT.md v0.2; evidence/ux-refresh/S01 and independent/
+- remaining_scope: none for this increment. Global sidebar/routing and production capabilities remain separate work.
+- preview: http://127.0.0.1:8787; new API and current dist. Original data/ux-refresh.json preserved; preview uses its new snapshot data/ux-refresh-preview-20261017.json because interrupted process left its original lock. No lock/data deletion performed.
+- final_document_commit: report/task/status only; capture final revision and verify product diff is empty before carrying S01 evidence.
+- usage: unknown.

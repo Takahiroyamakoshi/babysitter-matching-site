@@ -16,3 +16,13 @@
 - Not verified/implemented: production auth/payment/email/cloud; real legal/insurance readiness; remaining product workflows.
 
 This is completion of the first local synthetic increment, not of the complete marketplace.
+
+## UI/UX refresh UX01-UX09
+- Product/source revision: 46985e12b04024ac4761bff256580c0c702c7a20
+- Requirements: v0.45 chapter30; design/plan v0.2; independent design audit PASS.
+- Research: docs/design/UX-AUDIT.md v0.2 (Kidsline/KIDSNA public forms, no login or booking).
+- Verification: docs/verification/UX-REFRESH.md; unit17 PASS, independent API10 groups/62 HTTP PASS, parent CUA desktop/mobile and fixed-revision pre/post PASS.
+- Artifact review: docs/reviews/UX-REFRESH.md PASS; no blocking findings.
+- Evidence: evidence/ux-refresh/S01/, independent/, images15-23. Final preview image24; preview http://127.0.0.1:8787.
+- Scope: separate request/sitter forms, clear validation/titles/cards, conditional tabs, chat condition editing, guardian estimate/transport proposals and mutual confirmation, saved-price/operation compatibility.
+- Limits: no forced browser network failure or full WCAG audit; actual auth/payment/email and full sidebar remain outside this increment.
