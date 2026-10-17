@@ -39,3 +39,8 @@ This is completion of the first local synthetic increment, not of the complete m
 ## Product-wide inventory (2026-10-17)
 - docs/verification/PRODUCT-INVENTORY.md inventories 28 requirement areas against current source and prior evidence. This is a source/evidence audit, not a new execution pass.
 - Product completion and release tasks are indexed by docs/IMPLEMENTATION-CHECKLIST.md and docs/design/PRODUCT-COMPLETION.md. Existing local increment PASS does not imply product or release completion.
+
+## Technical selection (2026-10-17)
+- Design: docs/design/TECH-STACK.md; current primary-source comparisons: docs/research/TECH-INFRA.md and docs/research/TECH-PAYMENTS.md.
+- Scope: researched recommendation, fee arithmetic and adoption gates. Runtime/concurrency/restore/payment PoCs and external contracts are not completed by these documents. G01/G03/G05 remain open beyond this research step.
+- Independent design audit: docs/design/TECH-STACK-AUDIT.md PASS for TECH-STACK v1.0 / TECH-INFRA v1.0 / TECH-PAYMENTS v0.2. Five audit findings resolved; source changes and runtime PoCs are not part of this pass.
