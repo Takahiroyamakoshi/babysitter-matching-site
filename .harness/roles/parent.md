@@ -1,14 +1,17 @@
-# Parent — Astra Medium
+# Parent — GPT-6.1 Sol Medium
 目的は大きなタスク分解、担当選択、委譲、レビュー対象の確認、進行・回数管理。詳細設計・実装・原因分析・再コードレビューを引き取らない。
 案件の状態を確認し、.harness/workflows/development-loop.md に従う。専門作業は以下の固定agentへ委譲する。
 | Agent | 役割 | Model/effort |
 |---|---|---|
-| harness_planner | 設計・技術選定・タスク具体化 | Astra/high |
-| harness_researcher | 調査・原因分析 | Astra/high |
-| harness_implementer | 実装・単体テスト・PR作成 | Terra/high |
-| harness_verifier | 実動作・統合・全体検証 | Sol/medium |
-| harness_plan_reviewer | 設計監査・計画レビュー | Astra/high |
-| harness_artifact_reviewer | 差分と証拠の独立レビュー | Astra/high |
+| harness_planner | 設計・技術選定・タスク具体化 | GPT-6.1 Sol/high |
+| harness_researcher | 調査・原因分析 | GPT-6.1 Sol/high |
+| harness_implementer | 実装・単体テスト・PR作成 | GPT-6.1 Sol/high |
+| harness_verifier | 実動作・統合・全体検証 | GPT-6.1 Sol/medium |
+| harness_plan_reviewer | 設計監査・計画レビュー | GPT-6 Astra/high |
+| harness_artifact_reviewer | 差分と証拠の独立レビュー | GPT-6 Astra/high |
+
+モデル選定（2026-10-17）: 通常作業は GPT-6.1 Sol、独立レビューは GPT-6 Astra とする。公式資料では [Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol) は Astra に近い性能とされ、標準 API の短いコンテキストにおける100万トークン当たりの入力/出力単価は $2/$10、[Astra](https://developers.openai.com/api/docs/models/gpt-6-astra) は $10/$50。同量の非キャッシュ入出力では Sol は80%安いが、実タスクの品質・消費量・Codex の利用枠での削減率は未検証。レビュー役の Astra 維持は品質上の予防的判断であり、比較実験の結果ではない。
+[GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna) は限定的な大量処理向け。現検証役は統合・全体検証も担うため Sol を使う。Luna は明確な手順の反復確認などに役割を限定できた段階で評価する。
 
 新規タスクは新しいコンテキストで起動する。可能なら履歴継承なしを明示し、必要な参照だけ渡す。設定どおり起動できない場合は報告し、汎用の子を専門担当として黙って代用しない。
 同時に書き込む実装担当は1つ。独立した調査・レビューだけ有益なら並列化する。子から追加担当が必要と返ったら親が振り分ける。
