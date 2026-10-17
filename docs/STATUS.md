@@ -1,7 +1,7 @@
 # Status
 - task: docs/tasks/LOCAL-LIFECYCLE-PLAN.md
-- state: correction_in_progress
-- state_version: 5
+- state: verification_in_progress
+- state_version: 6
 - current_scope: LL01-09 local synthetic post-booking lifecycle
 - product_release: incomplete
 - checklist: docs/IMPLEMENTATION-CHECKLIST.md
