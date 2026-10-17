@@ -6,6 +6,7 @@ import type { Estimate } from './quote-state.mjs';
 import { api, ProfilePanel, SettingsEditor } from './profile';
 import type {OwnUser,SavedChild} from './profile';
 import './style.css';
+import {LifecyclePanel} from './lifecycle';
 
 type Child={name:string;birthDate:string;relation:string;care:string};
 type User={id:string;role:'guardian'|'sitter';name:string};
@@ -15,7 +16,7 @@ type CareRequest={id:string;guardianId:string;sitterId:string;status:string;star
 type Message={id:string;body:string;authorId:string;createdAt:string};
 type Conditions={start:string;end:string;birthDates:string[];childIds?:string[]};
 type Filters={region:string;qualification:string;maxRate:string};
-type Tab='search'|'consult'|'request'|'requests'|'account'|'profile'|'settings';
+type Tab='search'|'consult'|'request'|'requests'|'account'|'profile'|'settings'|'lifecycle'|'notifications';
 const quarterHours=Array.from({length:96},(_,i)=>String(Math.floor(i/4)).padStart(2,'0')+':'+String(i%4*15).padStart(2,'0'));
 const id=()=>crypto.randomUUID();
 const asIso=(v:string)=>v?v+':00+09:00':'';
@@ -80,6 +81,7 @@ function PriceBreakdown({quote,sitter=false}:{quote:Quote;sitter?:boolean}) {
   </dl>;
 }
 function App() {
+  const [unread,setUnread]=useState(0),[initialBooking,setInitialBooking]=useState('');
   const [own,setOwn]=useState<OwnUser|null>(null);
   const ownRef=useRef<OwnUser|null>(null);ownRef.current=own;
   const [users,setUsers]=useState<User[]>([]),[actor,setActor]=useState('guardian-demo'),[tab,setTab]=useState<Tab>('search');
@@ -107,7 +109,7 @@ function App() {
   conversationRef.current=conversationKey;
   const refresh=async(target=actor)=>{
     const data=await api('/api/bootstrap',target);
-    if(actorRef.current===target){setUsers(data.users);setRequests(data.requests)}
+    if(actorRef.current===target){setUsers(data.users);setRequests(data.requests);setUnread((data.notifications??[]).filter((n:{readAt:string|null})=>!n.readAt).length)}
   };
   useEffect(()=>{const target=actor;refresh().catch(e=>{if(actorRef.current===target)setError(e.message)});const timer=window.setInterval(()=>refresh().catch(()=>{}),15000);return()=>window.clearInterval(timer)},[actor]);
   useEffect(()=>{let live=true;const target=actor;api('/api/me',target).then(data=>{if(live&&actorRef.current===target)saveOwn(data.user)}).catch(e=>{if(live&&actorRef.current===target)setError(e.message)});return()=>{live=false}},[actor]);
@@ -123,7 +125,7 @@ function App() {
   const invalidate=()=>{guard.current.invalidate();setEstimate(invalidateEstimate<Quote>());const op=id();requestDraftRef.current=op;setRequestOp(op);setCalculating(false)};
   const updateConditions=(next:Conditions)=>{invalidate();searchEpoch.current++;setSearching(false);setConditions(next);setSitters([]);setSearched(false);setError('');setNotice('条件を変更しました。概算と確認チェックを更新してください。')};
   const updateFilters=(next:Filters)=>{invalidate();searchEpoch.current++;setSearching(false);setFilters(next);setSitters([]);setSearched(false);setError('');setNotice('')};
-  const switchActor=(next:string)=>{invalidate();searchEpoch.current++;setSearching(false);actorRef.current=next;conversationRef.current='';actionGuard.current.invalidate();setSending(false);setActor(next);setRegistrationNames({guardian:'',sitter:''});registrationDraftRef.current={guardian:id(),sitter:id()};ownRef.current=null;setOwn(null);setAcknowledged({});setConditions({start:dateValue(7,10),end:dateValue(7,13),birthDates:['']});setSelected(null);setMessages([]);setMessage('');setRequests([]);setSitters([]);setSearched(false);setTransport('');setTab(users.find(u=>u.id===next)?.role==='sitter'?'requests':'search');setError('');setNotice('');setMessageOp(id())};
+  const switchActor=(next:string)=>{invalidate();searchEpoch.current++;setSearching(false);actorRef.current=next;conversationRef.current='';actionGuard.current.invalidate();setSending(false);setActor(next);setUnread(0);setInitialBooking('');setRegistrationNames({guardian:'',sitter:''});registrationDraftRef.current={guardian:id(),sitter:id()};ownRef.current=null;setOwn(null);setAcknowledged({});setConditions({start:dateValue(7,10),end:dateValue(7,13),birthDates:['']});setSelected(null);setMessages([]);setMessage('');setRequests([]);setSitters([]);setSearched(false);setTransport('');setTab(users.find(u=>u.id===next)?.role==='sitter'?'requests':'search');setError('');setNotice('');setMessageOp(id())};
   const openSitter=(sitter:Sitter,guardian='guardian-demo')=>{
     invalidate();setSelected(sitter);setMessages([]);setConversationGuardian(isSitter?guardian:actor);setTransport('');setTab('consult');setError('');setNotice('');setMessageOp(id());
   };
@@ -190,7 +192,7 @@ function App() {
     }catch(e:any){if(current())setError(e.message)}
     finally{registrationPending.current=false;setRegistrationBusy(false);if(actionGuard.current.finish(ticket))setSending(false)}
   };
-  const title=tab==='search'?(isSitter?'シッターの掲載を見る':'シッターを探す'):tab==='consult'?(selected?.name+'さんに相談'):tab==='request'?'保育料の概算を確認':tab==='requests'?(isSitter?'届いた依頼を確認':'予約・依頼を確認'):tab==='profile'?(isSitter?'自分のプロフィール':'お子さま・プロフィール'):tab==='settings'?'料金・空き時間':'合成デモに登録';
+  const title=tab==='lifecycle'?'成立予約・実績':tab==='notifications'?'お知らせ':tab==='search'?(isSitter?'シッターの掲載を見る':'シッターを探す'):tab==='consult'?(selected?.name+'さんに相談'):tab==='request'?'保育料の概算を確認':tab==='requests'?(isSitter?'届いた依頼を確認':'予約・依頼を確認'):tab==='profile'?(isSitter?'自分のプロフィール':'お子さま・プロフィール'):tab==='settings'?'料金・空き時間':'合成デモに登録';
   const validEstimate=estimate.quote&&estimate.quoteKey===currentKey?estimate.quote:null;
   return <main className="shell">
     <div className="notice">ローカル合成デモです。実在の個人情報・連絡先・身分証・医療情報・決済情報を入力しないでください。</div>
@@ -198,6 +200,8 @@ function App() {
     <nav className="tabs" aria-label="画面">
       {!isSitter&&<button aria-current={tab==='search'?'page':undefined} onClick={()=>setTab('search')}>シッターを探す</button>}
       <button aria-current={tab==='requests'?'page':undefined} onClick={()=>setTab('requests')}>{isSitter?'届いた依頼':'予約・依頼'}</button>
+      <button aria-current={tab==='lifecycle'?'page':undefined} onClick={()=>setTab('lifecycle')}>成立予約・実績</button>
+      <button aria-current={tab==='notifications'?'page':undefined} onClick={()=>setTab('notifications')}>お知らせ（未読 {unread}）</button>
       {isSitter&&<button aria-current={tab==='settings'?'page':undefined} onClick={()=>setTab('settings')}>料金・空き時間</button>}
       <button aria-current={tab==='profile'?'page':undefined} onClick={()=>setTab('profile')}>{isSitter?'プロフィール':'お子さま・プロフィール'}</button>
       <button aria-current={tab==='account'?'page':undefined} onClick={()=>setTab('account')}>デモ登録</button>
@@ -226,6 +230,7 @@ function App() {
       {!isSitter&&<div className="consents"><label><input type="checkbox" checked={estimate.acceptTransport} disabled={!validEstimate||validEstimate.transport===null} onChange={e=>setEstimate({...estimate,acceptTransport:e.target.checked})}/>交通費提案額{validEstimate?.transport!==null&&validEstimate?yen(validEstimate.transport):'（未確定）'}と総支払額{validEstimate?.guardianTotal!==null&&validEstimate?yen(validEstimate.guardianTotal):'（未確定）'}を確認しました</label><label><input type="checkbox" checked={estimate.acceptCancellation} disabled={!validEstimate} onChange={e=>setEstimate({...estimate,acceptCancellation:e.target.checked})}/>ローカルデモの取消条件に同意します</label><button onClick={submitRequest} disabled={!canSubmitEstimate(estimate,currentKey)||sending}>正式依頼を送信</button></div>}
       </div><aside className="condition-editor"><RequestConditions prefix="estimate" value={conditions} onChange={updateConditions} savedChildren={own?.children}/><div className="card"><h2>依頼先</h2><p>{selected.name} / 通常保育</p><button className="secondary" onClick={()=>setTab('consult')}>相談に戻る</button></div></aside></section>}
     {tab==='requests'&&<section className="card"><h2>{isSitter?'届いた正式依頼':'予約・正式依頼'}</h2><p className="small">承認待ちは枠を占有しません。期限・空き時間・移動余裕を承認時に再確認します。</p><div className="list">{requests.map(request=><article className={'request '+request.status} key={request.id}><h3>{request.status==='pending'?'承認待ち':request.status==='confirmed'?'成立':request.status==='declined'?'辞退':'失効'}</h3><p>相手：{users.find(u=>u.id===(isSitter?request.guardianId:request.sitterId))?.name}</p><p>{displayTime(request.start)} 〜 {displayTime(request.end)}</p><p>お子さま：{request.children?.map((child,i)=>(i+1)+'人目 '+child.birthDate+'生まれ').join('、')||'保存済みの条件'}</p><PriceBreakdown quote={request.quote} sitter={isSitter}/><p className="small">承認期限：{displayTime(request.expiresAt)}</p>{isSitter&&<button className="secondary" onClick={()=>{const sitter=users.find(u=>u.id===actor);if(sitter)openSitter(sitter as Sitter,request.guardianId)}}>この保護者との相談を開く</button>}{isSitter&&request.status==='pending'&&<div className="consents">{request.transportProposal&&<label><input type="checkbox" checked={acknowledged[request.id]||false} onChange={e=>setAcknowledged({...acknowledged,[request.id]:e.target.checked})}/>日時・お子さま・交通費提案額{yen(request.quote.transport!)}を含む依頼条件を確認しました</label>}<div className="actions"><button onClick={()=>respond(request,'approve')} disabled={sending||!!request.transportProposal&&!acknowledged[request.id]}>依頼を承認して成立</button><button className="secondary" onClick={()=>respond(request,'decline')} disabled={sending}>辞退</button></div></div>}</article>)}{!requests.length&&<p className="empty">まだ予約・正式依頼はありません。</p>}</div></section>}
+    {(tab==='lifecycle'||tab==='notifications')&&<LifecyclePanel key={actor+'|'+tab} actor={actor} initialBooking={initialBooking} notificationsOnly={tab==='notifications'} onOpenBooking={id=>{setInitialBooking(id);setTab('lifecycle')}} onConsult={(sitterId,guardianId)=>{const sitter=users.find(u=>u.id===sitterId);if(sitter)openSitter(sitter as Sitter,guardianId)}} onChanged={()=>{refresh().catch(()=>{})}}/>}
     {tab==='profile'&&own&&<ProfilePanel key={actor} user={own} onSaved={saveOwn}/>}
     {tab==='settings'&&isSitter&&own&&<SettingsEditor key={actor} user={own} onSaved={saveOwn}/>}
     {isSitter&&(tab==='requests'||tab==='profile')&&<section className="card"><h2>自分の掲載プレビュー・相談</h2><p>{own?.name} / {own?.region} / {own?.rate?yen(own.rate):''}（1人・1時間）</p><p>{own?.listingReady?'合成審査確認済み・掲載可':'合成確認待ち・掲載と受付はできません'}</p><button onClick={()=>{const sitter=users.find(u=>u.id===actor);if(sitter)openSitter(sitter as Sitter)}}>保護者との相談を開く</button></section>}

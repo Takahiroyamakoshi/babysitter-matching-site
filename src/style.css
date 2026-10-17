@@ -114,3 +114,12 @@ fieldset legend{font-size:1.18rem;font-weight:750;padding:0 8px;margin-left:-8px
 .availability-slot label{min-width:0}.exception{padding:1rem;background:#f3f7f6;border-radius:.75rem}
 .child-condition{display:grid;gap:.75rem;border-top:1px solid #d9e3e1;padding-top:1rem}
 @media(max-width:500px){.availability-slot{grid-template-columns:1fr 1fr}.availability-slot label:first-child{grid-column:1/-1}}
+
+/* Booking lifecycle reuses the existing form/card vocabulary. */
+.booking-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:12px;margin:16px 0}
+.booking-choice{display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left}
+.booking-choice[aria-pressed="true"]{outline:3px solid var(--accent,#286b55);outline-offset:2px}
+.booking-detail{margin-top:20px;overflow-wrap:anywhere}
+.booking-detail fieldset{margin:16px 0}.booking-detail textarea{min-height:110px;width:100%;box-sizing:border-box}
+.report-summary{border-top:1px solid #d8ded9;margin-top:20px;padding-top:16px}
+.preserve-text{white-space:pre-wrap;overflow-wrap:anywhere}.lifecycle details{margin-top:20px}

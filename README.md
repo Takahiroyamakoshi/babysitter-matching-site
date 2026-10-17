@@ -54,3 +54,22 @@ The schema stays at 1. Missing profileRevision means 0, and missing availability
 
 ## 技術構成
 本番に向けた推奨構成・費用・採用条件は [技術構成の選定案](docs/design/TECH-STACK.md) を参照。現在のローカルデモの構成とは区別する。
+
+
+## 通常単発の実施・実績確認（ローカル合成）
+
+正式依頼を承認した後は「成立予約・実績」で開始→終了→実績提出へ進めます。保護者は「お知らせ」から最新版と成立時総額を確認し、明示承認または異議を申し立てます。異議後の訂正版は明示承認が必要です。「精算待ち」はローカル記録で、請求・実メール送信・入金はありません。
+
+通常は Web 保存と合成メールadapter受付の両方が成立してから24時間で精算待ちになります。通知受付失敗・結果不明では起算しません。開始・終了時刻や実績の要約訂正で成立時の料金・交通費・対象児は変わりません。旧合成予約の不足情報は `legacy synthetic` と表示します。
+
+合成時計を使う場合は、新しい専用ディレクトリに `clock.json` を作成し、既存データと異なる `--data` を指定します。以下はWSLで実行します（初回だけ `x` モードで新規作成）。
+
+```sh
+mkdir -p evidence/local-lifecycle/browser-S01
+python3 -c 'from pathlib import Path; p=Path("evidence/local-lifecycle/browser-S01/clock.json"); p.open("x").write("{\"now\":\"2026-10-20T00:00:00.000Z\"}")'
+/home/takahiro/.local/bin/node server.mjs --port 8796 --data evidence/local-lifecycle/browser-S01/store.json --synthetic-clock evidence/local-lifecycle/browser-S01/clock.json
+```
+
+画面に「合成時計（ローカル検証）」を表示します。2026-10-20 10:00〜13:00 JSTの予約を作成・承認し、別ターミナルでclockファイルの `now` を `2026-10-20T01:00:00.000Z` に更新すると開始できます。時刻はサーバー内で毎回参照し、通知workerは約1秒ごとに実行します。実績を提出した後、時計を24時間進めれば期限処理を確認できます。異議後の訂正版は時計を進めても保留のままです。ファイル更新は一時ファイルからの置換で行うと途中読取を避けられます。時計・障害注入のHTTP変更APIはありません。
+
+API/障害/競合の試験は `node --test server.test.mjs quote-state.test.mjs next-core.test.mjs lifecycle.test.mjs`。合成メールadapterや時計は `start({clock, mailAdapter, jobInterval:0})` と `tick()` でin-process検証できます。実装証拠は `docs/verification/LOCAL-LIFECYCLE-IMPLEMENTATION.md` を参照してください。

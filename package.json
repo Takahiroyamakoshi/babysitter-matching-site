@@ -6,7 +6,7 @@
   "scripts": {
     "build": "vite build",
     "typecheck": "tsc --noEmit",
-    "test": "node --test server.test.mjs quote-state.test.mjs next-core.test.mjs"
+    "test": "node --test server.test.mjs quote-state.test.mjs next-core.test.mjs lifecycle.test.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",

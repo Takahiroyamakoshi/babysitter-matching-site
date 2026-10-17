@@ -1,11 +1,13 @@
 import http from 'node:http';
 import { readFile, writeFile, rename, mkdir, open, unlink, stat } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 
 import { allowFields, syntheticName, childFields, scheduleFields, effectiveSchedule, withinAvailability, revisionCheck, ownUser } from './profile-domain.mjs';
+
+import { bookingView, lifecycleCommand, readNotification, lifecycleTick, syntheticMail } from './lifecycle-domain.mjs';
 
 const RULE_VERSION = 'local-demo-0.3-profile';
 const MAX_RATE = 10000;
@@ -98,7 +100,7 @@ export function quote(input, sitter, clock=now) {
 function conflict(bookings,sitterId,start,end) {
   const a=atJst(start), b=atJst(end);
   return bookings.some(x=>{
-    if(x.sitterId!==sitterId||x.status!=='confirmed') return false;
+    if(x.sitterId!==sitterId||!['confirmed','in_progress','ended','awaiting_guardian','disputed','settlement_ready'].includes(x.status)) return false;
     const gap=Math.max(BUFFER_MINUTES,x.bufferMinutes||0)*60000;
     return !(+b+gap<=+atJst(x.start)||+atJst(x.end)+gap<=+a);
   });
@@ -165,14 +167,19 @@ function security(req) {
   const host=(req.headers.host||'').toLowerCase(); if(!loopbackHost.test(host)) err(400,'HOST_REJECTED','loopback以外のHostは拒否しました。');
   const origin=req.headers.origin; if(origin&&!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)) err(403,'ORIGIN_REJECTED','許可されないOriginです。');
 }
-export function createHandler(store, clock=now) {
+export function createHandler(store, clock=now, {syntheticClock=false}={}) {
   return async(req,res)=>{
     try {
       security(req);
       const url=new URL(req.url,'http://127.0.0.1:8787'), actor=req.headers['x-demo-actor'];
       if(req.method!=='GET'&&!req.headers['content-type']?.includes('application/json')) err(415,'JSON_REQUIRED','変更はJSONで送信してください。');
       if(url.pathname.startsWith('/api/')&&(!actor||Array.isArray(actor)||!store.state.users.some(u=>u.id===actor))) err(401,'UNKNOWN_ACTOR','デモ利用者を選択してください。');
-      if(req.method==='GET'&&url.pathname==='/api/bootstrap') { const result=await store.mutate(s=>{expireRequests(s,clock);return {users:s.users.map(u=>u.role==='sitter'?publicSitter(u):{id:u.id,role:u.role,name:u.name}),requests:s.requests.filter(r=>r.guardianId===actor||r.sitterId===actor),bookings:s.bookings.filter(b=>b.guardianId===actor||b.sitterId===actor)};}); return send(res,200,result); }
+      if(req.method==='GET'&&url.pathname==='/api/bootstrap') { const result=await store.mutate(s=>{expireRequests(s,clock);return {contractVersion:'local-lifecycle-1',serverTime:clock().toISOString(),syntheticClock,notifications:(s.notifications??[]).filter(n=>n.recipientId===actor).map(n=>({...n,mailStatus:(s.outbox??[]).find(o=>o.notificationId===n.id)?.status??'pending'})),users:s.users.map(u=>u.role==='sitter'?publicSitter(u):{id:u.id,role:u.role,name:u.name}),requests:s.requests.filter(r=>r.guardianId===actor||r.sitterId===actor),bookings:s.bookings.filter(b=>b.guardianId===actor||b.sitterId===actor).map(b=>bookingView(s,actor,b.id))};}); return send(res,200,result); }
+      const bookingPath=url.pathname.match(/^\/api\/bookings\/([^/]+)(?:\/(start|end|report|approve|dispute))?$/);
+      if(bookingPath&&req.method==='GET'&&!bookingPath[2])return send(res,200,{booking:bookingView(store.state,actor,bookingPath[1])});
+      if(bookingPath&&req.method==='POST'&&bookingPath[2]){const input=await body(req);const result=await store.mutate(s=>lifecycleCommand(s,actor,bookingPath[1],bookingPath[2],input,clock));return send(res,200,result);}
+      const notificationPath=url.pathname.match(/^\/api\/notifications\/([^/]+)\/read$/);
+      if(notificationPath&&req.method==='POST'){const input=await body(req);return send(res,200,await store.mutate(s=>readNotification(s,actor,notificationPath[1],input,clock)));}
       if(req.method==='GET'&&url.pathname==='/api/me') {const user=store.state.users.find(u=>u.id===actor);return send(res,200,{user:ownUser(user,isVerified(user))});}
       const childPath=url.pathname.match(/^\/api\/me\/children\/([^/]+)$/);
       const editProfile=req.method==='PATCH'&&url.pathname==='/api/me';
@@ -204,13 +211,13 @@ export function createHandler(store, clock=now) {
             else {child.name=fields.name;child.birthDate=fields.birthDate;}
           }
           user.profileRevision=(user.profileRevision||0)+1;
-          const result={user:clone(ownUser(user,isVerified(user)))};s.operations[actor+':'+input.operationId].result=result;return result;
+          const result={user:clone(ownUser(user,isVerified(user)))};s.operations[actor+':'+input.operationId].result=clone(result);return result;
         });return send(res,addChild?201:200,result);
       }
       if(req.method==='GET'&&url.pathname==='/api/search') return send(res,200,{sitters:listSitters(store.state,Object.fromEntries(url.searchParams),clock)});
       if(req.method==='GET'&&url.pathname==='/api/messages') { const sitterId=url.searchParams.get('sitterId'), p=participant(store.state,actor,sitterId); const guardianId=p.user.role==='sitter'?url.searchParams.get('guardianId'):actor; if(!guardianId||!store.state.users.some(u=>u.id===guardianId&&u.role==='guardian')) err(422,'GUARDIAN_REQUIRED','会話する保護者を選択してください。'); return send(res,200,{messages:store.state.messages.filter(m=>m.sitterId===sitterId&&m.guardianId===guardianId)}); }
       if(req.method==='POST'&&url.pathname==='/api/register') { const input=await body(req); const r=await store.mutate(s=>{if(!['guardian','sitter'].includes(input.role)||!input.name)err(422,'INVALID_REGISTRATION','役割と表示名を入力してください。'); const name=syntheticName(input.name); const id='local-'+randomUUID(); const u=input.role==='guardian'?{id,role:'guardian',name,region:'東京',children:[]}:{id,role:'sitter',name,region:'東京',rate:1800,transport:500,qualifications:[],ageMonths:[12,120],capacity:1,multiScenario:false,review:{qualification:false,training:false,notification:false,initialInsurance:false},available:false};s.users.push(u);return u;}); return send(res,201,{user:ownUser(r,isVerified(r)),notice:input.role==='sitter'?'新規シッターは合成確認待ちのため検索・受付できません。':'ローカル合成登録を完了しました。'}); }
-      if(req.method==='POST'&&url.pathname==='/api/messages') { const input=await body(req); const result=await store.mutate(s=>{const {user,sitter}=participant(s,actor,input.sitterId); if(!input.body?.trim())err(422,'EMPTY_MESSAGE','相談内容を入力してください。'); const fingerprint=JSON.stringify({to:input.sitterId,guardianId:input.guardianId||actor,body:input.body}); const prior=operation(s,actor,input.operationId,fingerprint,null);if(prior)return prior; const guardianId=user.role==='guardian'?actor:input.guardianId; if(user.role==='sitter'&&!guardianId)err(422,'GUARDIAN_REQUIRED','返信先を指定してください。'); const m={id:randomUUID(),sitterId:sitter.id,guardianId,authorId:actor,body:input.body.trim(),createdAt:clock().toISOString()};s.messages.push(m);s.operations[actor+':'+input.operationId].result=m;return m;});return send(res,201,{message:result}); }
+      if(req.method==='POST'&&url.pathname==='/api/messages') { const input=await body(req); const result=await store.mutate(s=>{const {user,sitter}=participant(s,actor,input.sitterId); if(!input.body?.trim())err(422,'EMPTY_MESSAGE','相談内容を入力してください。'); const fingerprint=JSON.stringify({to:input.sitterId,guardianId:input.guardianId||actor,body:input.body}); const prior=operation(s,actor,input.operationId,fingerprint,null);if(prior)return prior; const guardianId=user.role==='guardian'?actor:input.guardianId; if(user.role==='sitter'&&!guardianId)err(422,'GUARDIAN_REQUIRED','返信先を指定してください。'); const m={id:randomUUID(),sitterId:sitter.id,guardianId,authorId:actor,body:input.body.trim(),createdAt:clock().toISOString()};s.messages.push(m);s.operations[actor+':'+input.operationId].result=clone(m);return m;});return send(res,201,{message:result}); }
       if(req.method==='POST'&&url.pathname==='/api/quotes') { const input=await body(req); const sitter=store.state.users.find(x=>x.id===input.sitterId); if(!sitter)err(404,'SITTER_NOT_FOUND','シッターが見つかりません。'); return send(res,200,quote(input,sitter,clock)); }
       if(req.method==='POST'&&url.pathname==='/api/requests') { const input=await body(req); const result=await store.mutate(s=>{const guardian=s.users.find(x=>x.id===actor&&x.role==='guardian');if(!guardian)err(403,'GUARDIAN_ONLY','保護者だけが正式依頼できます。');const sitter=s.users.find(x=>x.id===input.sitterId);if(!sitter)err(404,'SITTER_NOT_FOUND','シッターが見つかりません。');const fingerprint=JSON.stringify({...input,guardianId:actor});
         const prior=operation(s,actor,input.operationId,fingerprint,null);if(prior)return prior;
@@ -219,14 +226,14 @@ export function createHandler(store, clock=now) {
         if(input.acceptCancellation!==true)err(422,'CANCELLATION_CONSENT_REQUIRED','キャンセル条件への同意が必要です。');
         if(input.transportAmount===undefined)err(422,'TRANSPORT_REQUIRED','相談した交通費提案額を入力してください。');
         const q=quote(input,sitter,clock);
-        if(input.acceptTransport!==true)err(422,'TRANSPORT_CONSENT_REQUIRED','交通費提案額と総支払額の確認が必要です。');if(!withinAvailability(sitter,q.slot.start,q.slot.end))err(422,'OUTSIDE_AVAILABILITY','合成シッターの空き時間外です。');if(conflict(s.bookings,sitter.id,q.slot.start,q.slot.end))err(409,'SLOT_CONFLICT','成立済み予約と移動余裕が競合します。');const r={id:randomUUID(),guardianId:actor,sitterId:sitter.id,status:'pending',createdAt:clock().toISOString(),start:q.slot.start,end:q.slot.end,children:q.slot.children,serviceType:input.serviceType||'normal',medical:!!input.medical,medication:!!input.medication,sick:!!input.sick,postIllness:!!input.postIllness,expiresAt:'',quote:q.quote,ruleVersion:RULE_VERSION,transportProposal:{amount:q.quote.transport,guardianAccepted:true},cancellation:'取消条件（ローカルデモ）: 実行・精算は未実装です。日本時間の利用開始日基準で、前々日以前0%、前日50%、当日100%を保育料の取消料率案とし、返金不能な発生済み実費だけを交通費対象とします。取消料も運営15%・シッター85%の案です。'};r.expiresAt=expiry(r);s.requests.push(r);s.operations[actor+':'+input.operationId].result=r;return r;});return send(res,201,{request:result}); }
+        if(input.acceptTransport!==true)err(422,'TRANSPORT_CONSENT_REQUIRED','交通費提案額と総支払額の確認が必要です。');if(!withinAvailability(sitter,q.slot.start,q.slot.end))err(422,'OUTSIDE_AVAILABILITY','合成シッターの空き時間外です。');if(conflict(s.bookings,sitter.id,q.slot.start,q.slot.end))err(409,'SLOT_CONFLICT','成立済み予約と移動余裕が競合します。');const r={id:randomUUID(),guardianId:actor,sitterId:sitter.id,status:'pending',createdAt:clock().toISOString(),start:q.slot.start,end:q.slot.end,children:q.slot.children,serviceType:input.serviceType||'normal',medical:!!input.medical,medication:!!input.medication,sick:!!input.sick,postIllness:!!input.postIllness,expiresAt:'',quote:q.quote,ruleVersion:RULE_VERSION,transportProposal:{amount:q.quote.transport,guardianAccepted:true},cancellation:'取消条件（ローカルデモ）: 実行・精算は未実装です。日本時間の利用開始日基準で、前々日以前0%、前日50%、当日100%を保育料の取消料率案とし、返金不能な発生済み実費だけを交通費対象とします。取消料も運営15%・シッター85%の案です。'};r.expiresAt=expiry(r);s.requests.push(r);s.operations[actor+':'+input.operationId].result=clone(r);return r;});return send(res,201,{request:result}); }
       const decline=url.pathname.match(/^\/api\/requests\/([^/]+)\/decline$/);
-      if(req.method==='POST'&&decline) { const input=await body(req); const result=await store.mutate(s=>{expireRequests(s,clock);const r=s.requests.find(x=>x.id===decline[1]);if(!r)err(404,'REQUEST_NOT_FOUND','依頼が見つかりません。');if(r.sitterId!==actor)err(403,'SITTER_ONLY','依頼先シッターだけが辞退できます。');const prior=operation(s,actor,input.operationId,JSON.stringify({request:r.id,action:'decline'}),null);if(prior)return prior;if(r.status!=='pending')err(409,'REQUEST_NOT_PENDING','この依頼は承認待ちではありません。');r.status='declined';s.operations[actor+':'+input.operationId].result=r;return r;});return send(res,200,{request:result}); }
+      if(req.method==='POST'&&decline) { const input=await body(req); const result=await store.mutate(s=>{expireRequests(s,clock);const r=s.requests.find(x=>x.id===decline[1]);if(!r)err(404,'REQUEST_NOT_FOUND','依頼が見つかりません。');if(r.sitterId!==actor)err(403,'SITTER_ONLY','依頼先シッターだけが辞退できます。');const prior=operation(s,actor,input.operationId,JSON.stringify({request:r.id,action:'decline'}),null);if(prior)return prior;if(r.status!=='pending')err(409,'REQUEST_NOT_PENDING','この依頼は承認待ちではありません。');r.status='declined';s.operations[actor+':'+input.operationId].result=clone(r);return r;});return send(res,200,{request:result}); }
       const approve=url.pathname.match(/^\/api\/requests\/([^/]+)\/approve$/);
       if(req.method==='POST'&&approve) { const input=await body(req);const result=await store.mutate(s=>{expireRequests(s,clock);const r=s.requests.find(x=>x.id===approve[1]);if(!r)err(404,'REQUEST_NOT_FOUND','依頼が見つかりません。');if(r.sitterId!==actor)err(403,'SITTER_ONLY','依頼先シッターだけが承認できます。');const usesTransportConfirmation=!!r.transportProposal;
         const fingerprint=JSON.stringify(usesTransportConfirmation?{request:r.id,acknowledgeTransport:input.acknowledgeTransport}:{request:r.id});
         const prior=operation(s,actor,input.operationId,fingerprint,null);if(prior)return prior;
-        if(usesTransportConfirmation&&input.acknowledgeTransport!==true)err(422,'TRANSPORT_ACKNOWLEDGEMENT_REQUIRED','交通費提案額を含む依頼条件を確認してください。');if(r.status==='expired')err(409,'REQUEST_EXPIRED','この依頼は期限切れです。');if(r.status!=='pending')err(409,'REQUEST_NOT_PENDING','この依頼は承認待ちではありません。');const sitter=s.users.find(x=>x.id===actor);quote({start:r.start,end:r.end,children:r.children,serviceType:r.serviceType,medical:r.medical,medication:r.medication,sick:r.sick,postIllness:r.postIllness},sitter,clock);if(!withinAvailability(sitter,r.start,r.end))err(422,'OUTSIDE_AVAILABILITY','合成シッターの空き時間外です。');if(conflict(s.bookings,actor,r.start,r.end))err(409,'SLOT_CONFLICT','成立済み予約と移動余裕が競合します。');if(usesTransportConfirmation)r.transportProposal.sitterAcknowledged=true;r.status='confirmed';const b={id:randomUUID(),requestId:r.id,sitterId:actor,guardianId:r.guardianId,status:'confirmed',start:r.start,end:r.end,bufferMinutes:BUFFER_MINUTES,quote:r.quote,children:r.children,serviceType:r.serviceType,transportProposal:r.transportProposal,ruleVersion:r.ruleVersion};s.bookings.push(b);s.operations[actor+':'+input.operationId].result={request:r,booking:b};return {request:r,booking:b};});return send(res,200,result); }
+        if(usesTransportConfirmation&&input.acknowledgeTransport!==true)err(422,'TRANSPORT_ACKNOWLEDGEMENT_REQUIRED','交通費提案額を含む依頼条件を確認してください。');if(r.status==='expired')err(409,'REQUEST_EXPIRED','この依頼は期限切れです。');if(r.status!=='pending')err(409,'REQUEST_NOT_PENDING','この依頼は承認待ちではありません。');const sitter=s.users.find(x=>x.id===actor);quote({start:r.start,end:r.end,children:r.children,serviceType:r.serviceType,medical:r.medical,medication:r.medication,sick:r.sick,postIllness:r.postIllness},sitter,clock);if(!withinAvailability(sitter,r.start,r.end))err(422,'OUTSIDE_AVAILABILITY','合成シッターの空き時間外です。');if(conflict(s.bookings,actor,r.start,r.end))err(409,'SLOT_CONFLICT','成立済み予約と移動余裕が競合します。');if(usesTransportConfirmation)r.transportProposal.sitterAcknowledged=true;r.status='confirmed';const b={id:randomUUID(),requestId:r.id,sitterId:actor,guardianId:r.guardianId,status:'confirmed',start:r.start,end:r.end,bufferMinutes:BUFFER_MINUTES,quote:r.quote,children:r.children,serviceType:r.serviceType,transportProposal:r.transportProposal,ruleVersion:r.ruleVersion};s.bookings.push(b);s.operations[actor+':'+input.operationId].result=clone({request:r,booking:b});return {request:r,booking:b};});return send(res,200,result); }
       if(req.method==='POST'&&url.pathname==='/api/testing/fail-write') return send(res,403,{code:'NOT_AVAILABLE',message:'本番相当の変更APIはありません。'});
       if(req.method!=='GET'&&url.pathname.startsWith('/api/')) err(404,'NOT_IMPLEMENTED','この変更APIは実装されていません。');
       const file=url.pathname==='/'?'index.html':url.pathname.slice(1);
@@ -237,15 +244,17 @@ export function createHandler(store, clock=now) {
     } catch(e) { send(res,e.status||500,{code:e.code||'INTERNAL_ERROR',message:e.message||'予期しないエラーです。'}); }
   };
 }
-export async function start({dataFile=path.join(path.dirname(fileURLToPath(import.meta.url)),'data','local-demo.json'),port=8787}={}) {
+export async function start({dataFile=path.join(path.dirname(fileURLToPath(import.meta.url)),'data','local-demo.json'),port=8787,clock=now,syntheticClock=false,mailAdapter=syntheticMail,jobInterval=1000}={}) {
   const store=new Store(dataFile);
-  try { await store.init(); const server=http.createServer(createHandler(store)); await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,'127.0.0.1',resolve);}); return {server,store}; }
+  try { await store.init(); const server=http.createServer(createHandler(store,clock,{syntheticClock})); await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,'127.0.0.1',resolve);}); let running=false;const tick=async()=>{if(running)return;running=true;try{await lifecycleTick(store,clock,mailAdapter);}finally{running=false;}};const timer=jobInterval>0?setInterval(()=>tick().catch(e=>console.error('Local lifecycle job:',e.message)),jobInterval):null;timer?.unref();server.once('close',()=>{if(timer)clearInterval(timer)});return {server,store,tick}; }
   catch(e) { await store.close(); throw e; }
 }
 if(process.argv[1]===fileURLToPath(import.meta.url)) {
   const args=process.argv.slice(2), value=(name,fallback)=>{const i=args.indexOf(name);return i>=0?args[i+1]:fallback;};
   const port=Number(value('--port',process.env.PORT||8787)), dataFile=value('--data',process.env.DATA_FILE);
-  start({port,dataFile}).then(({server,store})=>{
+  const clockFile=value('--synthetic-clock',null);
+  const clock=clockFile?()=>{const value=JSON.parse(readFileSync(clockFile,'utf8'));const date=new Date(value.now);if(!Number.isFinite(+date))throw new Error('Invalid synthetic clock');return date;}:now;
+  start({port,dataFile,clock,syntheticClock:!!clockFile}).then(({server,store})=>{
     console.log('Local demo: http://127.0.0.1:'+port);
     const stop=()=>server.close(()=>store.close().finally(()=>process.exit(0)));
     process.once('SIGINT',stop); process.once('SIGTERM',stop);
