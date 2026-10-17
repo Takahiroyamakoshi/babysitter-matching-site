@@ -13,6 +13,7 @@ type Message={id:string;body:string;authorId:string;createdAt:string};
 type Conditions={start:string;end:string;birthDates:string[]};
 type Filters={region:string;qualification:string;maxRate:string};
 type Tab='search'|'consult'|'request'|'requests'|'account';
+const quarterHours=Array.from({length:96},(_,i)=>String(Math.floor(i/4)).padStart(2,'0')+':'+String(i%4*15).padStart(2,'0'));
 const id=()=>crypto.randomUUID();
 const asIso=(v:string)=>v?v+':00+09:00':'';
 const dateValue=(days:number,hour:number)=>new Date(Date.now()+days*86400000).toISOString().slice(0,10)+'T'+String(hour).padStart(2,'0')+':00';
@@ -30,6 +31,7 @@ async function api(path:string,actor:string,opts:RequestInit={}) {
 function conditionError(value:Conditions) {
   if(!value.start||!value.end)return '開始・終了日時を入力してください。';
   const start=new Date(asIso(value.start)),end=new Date(asIso(value.end));
+  if(!Number.isFinite(+start)||!Number.isFinite(+end))return '開始・終了日時を入力してください。';
   if(+start<=Date.now()||+end<=+start)return '未来の開始日時と、それより後の終了日時を指定してください。';
   if(+end-+start<3*3600000)return '通常保育は最低3時間です。終了日時を延ばしてください。';
   if(start.getUTCMinutes()%15||end.getUTCMinutes()%15)return '開始・終了は15分刻みで指定してください。';
@@ -40,9 +42,15 @@ function RequestConditions({value,onChange,prefix}:{value:Conditions;onChange:(v
   const reason=conditionError(value),invalidTime=!!reason&&!reason.includes('生年月日');
   return <fieldset className="card form"><legend>お子さま・依頼日時</legend>
     <p className="small">通常保育は最低3時間、15分刻みです。日時は日本時間で入力してください。</p>
-    <div className="row">
-      <label htmlFor={prefix+'-start'}>開始日時<input id={prefix+'-start'} type="datetime-local" step="900" value={value.start} aria-invalid={invalidTime} aria-describedby={prefix+'-help'} onChange={e=>onChange({...value,start:e.target.value})}/></label>
-      <label htmlFor={prefix+'-end'}>終了日時<input id={prefix+'-end'} type="datetime-local" step="900" value={value.end} aria-invalid={invalidTime} aria-describedby={prefix+'-help'} onChange={e=>onChange({...value,end:e.target.value})}/></label>
+    <div className="request-datetimes">
+      {(['start','end'] as const).map(field=>{
+        const [date,time='00:00']=value[field].split('T'),label=field==='start'?'開始':'終了';
+        // Keep the selected time even while its date is cleared; validation blocks incomplete values.
+        return <div className="request-datetime" key={field}>
+          <label htmlFor={prefix+'-'+field+'-date'}>{label}日<input id={prefix+'-'+field+'-date'} type="date" value={date} aria-invalid={invalidTime} aria-describedby={prefix+'-help'} onChange={e=>onChange({...value,[field]:e.target.value+'T'+time})}/></label>
+          <label htmlFor={prefix+'-'+field+'-time'}>{label}時刻<select id={prefix+'-'+field+'-time'} value={time} aria-invalid={invalidTime} aria-describedby={prefix+'-help'} onChange={e=>onChange({...value,[field]:date+'T'+e.target.value})}>{quarterHours.map(hour=><option key={hour} value={hour}>{hour}</option>)}</select></label>
+        </div>;
+      })}
     </div>
     <label htmlFor={prefix+'-count'}>お子さまの人数<select id={prefix+'-count'} value={value.birthDates.length} onChange={e=>onChange({...value,birthDates:Array.from({length:Number(e.target.value)},(_,i)=>value.birthDates[i]||'')})}><option value="1">1人</option><option value="2">2人（条件付き）</option><option value="3">3人（条件付き）</option></select></label>
     {value.birthDates.map((birthDate,i)=><label key={i} htmlFor={prefix+'-dob-'+i}>{i+1}人目の生年月日<input id={prefix+'-dob-'+i} type="date" value={birthDate} aria-invalid={!birthDate} aria-describedby={prefix+'-help'} onChange={e=>onChange({...value,birthDates:value.birthDates.map((d,j)=>i===j?e.target.value:d)})}/></label>)}

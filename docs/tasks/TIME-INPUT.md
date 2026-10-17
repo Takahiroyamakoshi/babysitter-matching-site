@@ -1,0 +1,11 @@
+# Quarter-hour input correction
+- id: time-input
+- state: verifying
+- state_version: 2
+- trial: S01
+- failed_submissions: 0
+- authorization: user requested implementation of date plus quarter-hour-only time selection in search/consult/estimate.
+- scope: shared RequestConditions input; preserve combined timestamp, Japan time, 3-hour minimum, estimate invalidation and API 15-minute validation.
+- acceptance: separate labeled date and native time select with 96 quarter-hour options; no free minute input; date/time changes retain counterpart; all three screens; desktop/mobile readable; build/typecheck plus focused regression and browser check; independent artifact review.
+- base: eeb5bc4d413e5025f6a527e8da5e0a9bd68214ab
+- external_operations: no push/PR/deploy/payment/email; local synthetic only.
