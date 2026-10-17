@@ -35,3 +35,7 @@ This is completion of the first local synthetic increment, not of the complete m
 - Artifact review: docs/reviews/NEXT-CORE.md PASS. S01 native prompt acceptance blocked, S02 inline form fixed; original evidence retained. API/domain exact hashes unchanged across UI correction; relevant API evidence carried.
 - Local preview: http://127.0.0.1:8787; original data preserved in a new preview snapshot. Final image evidence/next-core/parent/22-preview-8787-profile.png.
 - Limits: no real auth/PII/payment/email/deploy, forced browser disconnect/delay or exhaustive accessibility audit. Remaining marketplace roadmap stays in design.
+
+## Product-wide inventory (2026-10-17)
+- docs/verification/PRODUCT-INVENTORY.md inventories 28 requirement areas against current source and prior evidence. This is a source/evidence audit, not a new execution pass.
+- Product completion and release tasks are indexed by docs/IMPLEMENTATION-CHECKLIST.md and docs/design/PRODUCT-COMPLETION.md. Existing local increment PASS does not imply product or release completion.

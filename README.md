@@ -1,5 +1,7 @@
 # Babysitter local synthetic demo
 
+Product planning starts with [the integrated implementation checklist](docs/IMPLEMENTATION-CHECKLIST.md), [completion criteria](docs/design/PRODUCT-COMPLETION.md), and [current implementation inventory](docs/verification/PRODUCT-INVENTORY.md). The local demo described below is an intermediate result, not the completed product.
+
 A loopback-only React/TypeScript demo for synthetic registration, search, text consultation, normal-care requests, and sitter approval. Do not enter real contact, address, identity, medical, or payment information. Identity verification, payment, email, sick care, post-illness care, and medication assistance are unavailable.
 
 ## Search, consultation, and pricing
