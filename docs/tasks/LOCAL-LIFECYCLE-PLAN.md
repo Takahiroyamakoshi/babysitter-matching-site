@@ -4,12 +4,12 @@
 - requirement_ids: REQUIREMENTS v0.45 S01〜S03、§6/7/12/21/26/28/29/30、G10/G16/G17bのL部分、BUSINESS-CONTRACTS BC01〜04/06/07/08。全G16/G17bや公開準備の完了ではない。
 - dependencies: G00独立監査済全体計画、G01業務契約の当該範囲の独立設計/計画監査。既存G11/G12の合成通常単発snapshotと本人/児/役割資産を継承。
 - assigned_agent: 親から実装担当へ。独立検証・成果物レビューは別担当、実画面は親のCUA。
-- state: verification_in_progress
-- state_version: 2
+- state: correction_in_progress
+- state_version: 3
 - updated_at_utc: 2026-10-17
 - revision_record: v0.1 planner提案。状態遷移・実装開始・独立合格は親が別記録する。
 - cycle: initial
-- failed_submissions: 0
+- failed_submissions: 1
 - additional_used: false
 - pr / head / base / tested_revision: PRなし、ソース基準 d7fb83a02de9d280f8e7c0e1d5a657d01aa47ae3。実装対象版/証拠は提出時固定。
 - plan_approval_reference: PROJECT「Implementation-led continuation」。通常local合成実装は既許可、当該設計/計画は監査待ち。push/PR/merge/外部メール/決済/実情報/公開/削除は含めない。
@@ -107,3 +107,6 @@ Lでは通知のWeb保存と合成メールadapter受付を保存する。メー
 
 - S01 implementation received: a5aab6a9d3ea9e7f1150acaaf5122b4c445c9340; evidence/local-lifecycle/S01/revision.json. 42/42 automated tests, typecheck/build PASS. Source frozen. Independent API and parent CUA pending; no completion verdict.
 - verification_started_at_utc: 2026-10-17T09:46:41.934119Z (verification handoff capture)
+
+- S01 failed once: independent persisted consent conditionHash absent (BC04), evidence/local-lifecycle/independent/run-S02/explicit-consent-state.json. UI flow observed PASS at358a34d; overall not accepted.
+- S02 correction: immutable version-bound explicit consent record; no UI/policy changes. Parent CUA evidence evidence/local-lifecycle/browser-S01/cua-report.md.
