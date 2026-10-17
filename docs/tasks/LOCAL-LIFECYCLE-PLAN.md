@@ -4,8 +4,8 @@
 - requirement_ids: REQUIREMENTS v0.45 S01〜S03、§6/7/12/21/26/28/29/30、G10/G16/G17bのL部分、BUSINESS-CONTRACTS BC01〜04/06/07/08。全G16/G17bや公開準備の完了ではない。
 - dependencies: G00独立監査済全体計画、G01業務契約の当該範囲の独立設計/計画監査。既存G11/G12の合成通常単発snapshotと本人/児/役割資産を継承。
 - assigned_agent: 親から実装担当へ。独立検証・成果物レビューは別担当、実画面は親のCUA。
-- state: planned
-- state_version: 0
+- state: implementation_in_progress
+- state_version: 1
 - updated_at_utc: 2026-10-17
 - revision_record: v0.1 planner提案。状態遷移・実装開始・独立合格は親が別記録する。
 - cycle: initial
@@ -96,3 +96,11 @@ Lでは通知のWeb保存と合成メールadapter受付を保存する。メー
 
 ## Interventions / timing
 状態遷移・担当割当・版固定・監査時刻は親のG01/実装task記録に従う。
+
+## Parent execution record
+- assigned: harness_implementer
+- trial: S01
+- plan_audit: docs/design/BUSINESS-CONTRACTS-AUDIT.md design PASS and plan PASS at 31599ad0b187dc29a52284ac9d889503e832f52d
+- started_at_utc: 2026-10-17T09:39:00Z
+- external_operations: none; local commits allowed, no push/PR/merge
+- next_action: implement LL01-09, capture clean revision, then independent verification and artifact review

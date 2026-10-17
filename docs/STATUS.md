@@ -1,8 +1,8 @@
 # Status
-- task: docs/tasks/G01.md
-- state: design_review
-- state_version: 2
-- current_scope: G01 business contracts, then independently audited ordinary local implementation
+- task: docs/tasks/LOCAL-LIFECYCLE-PLAN.md
+- state: implementation_in_progress
+- state_version: 1
+- current_scope: LL01-09 local synthetic post-booking lifecycle
 - product_release: incomplete
 - checklist: docs/IMPLEMENTATION-CHECKLIST.md
 - completion_criteria: docs/design/PRODUCT-COMPLETION.md
@@ -12,5 +12,6 @@
 - prior_product_revision: 483a43c5dacf39ebdd27bef58eb25e51b6c64fb6
 - prior_increment: NEXT-CORE complete
 - preview: http://127.0.0.1:8787
-- next_task: G01 independent audit, then bounded local implementation
+- next_task: implement, independently verify and review LL01-09
 - external_operations: none
+- business_contracts: G01 complete, design and task plan audit PASS; docs/design/BUSINESS-CONTRACTS-AUDIT.md
