@@ -1,10 +1,10 @@
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {allowFields} from './profile-domain.mjs';
 const DAY=86400000;
 const fail=(status,code,message)=>{throw Object.assign(new Error(message),{status,code})};
 const copy=structuredClone;
 const stamp=clock=>clock().toISOString();
-function collections(s){s.reports??=[];s.notifications??=[];s.outbox??=[];s.settlements??=[];s.lifecycleHistory??=[];s.disputes??=[];}
+function collections(s){s.reports??=[];s.notifications??=[];s.outbox??=[];s.settlements??=[];s.lifecycleHistory??=[];s.disputes??=[];s.consents??=[];}
 export function bookingFor(s,actor,id){
  const b=s.bookings.find(b=>b.id===id);
  if(!b)fail(404,'BOOKING_NOT_FOUND','予約が見つかりません。');
@@ -17,17 +17,37 @@ export function bookingView(s,actor,id){
  return {...copy(b),revision:b.revision??0,contractVersion:'local-lifecycle-1',children:copy(b.children??r?.children??null),
   legacySynthetic:!b.children||!b.transportProposal?.sitterAcknowledged||!b.ruleVersion||!b.quote?.transportStatus,
   reports:copy((s.reports??[]).filter(r=>r.bookingId===id)),disputes:copy((s.disputes??[]).filter(d=>d.bookingId===id)),
-  settlements:copy((s.settlements??[]).filter(x=>x.bookingId===id)),history:copy((s.lifecycleHistory??[]).filter(x=>x.bookingId===id))};
+  consents:copy((s.consents??[]).filter(c=>c.bookingId===id)),settlements:copy((s.settlements??[]).filter(x=>x.bookingId===id)),history:copy((s.lifecycleHistory??[]).filter(x=>x.bookingId===id))};
 }
 function history(s,b,type,actor,at,detail={}){s.lifecycleHistory.push({id:randomUUID(),bookingId:b.id,type,actor,at,...detail});}
 function holdReady(s,b,at,reason,automaticOnly=false){
  for(const x of s.settlements)if(x.bookingId===b.id&&x.status==='ready'&&(!automaticOnly||x.cause==='timeout')){x.status='held';x.heldAt=at;x.holdReason=reason;history(s,b,'settlement_held','system',at,{settlementId:x.id,reason});}
 }
-function ready(s,b,r,cause,at,actor){
+// Hash only persisted booking/report conditions, never mutable profile projections.
+function canonical(value){
+ if(Array.isArray(value))return value.map(canonical);
+ if(value&&typeof value==='object')return Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])]));
+ return value;
+}
+function reportConsent(s,b,r,actor,at,input){
+ const request=s.requests.find(request=>request.id===b.requestId);
+ // JSON normalization matches the persisted representation (including unknown legacy nulls).
+ const conditionSnapshot=JSON.parse(JSON.stringify({contractVersion:'local-lifecycle-1',
+  booking:{id:b.id,requestId:b.requestId??null,guardianId:b.guardianId,sitterId:b.sitterId,start:b.start,end:b.end,
+   serviceType:b.serviceType??request?.serviceType??null,children:copy(b.children??request?.children??null),transportProposal:copy(b.transportProposal??null)},
+  report:{id:r.id,version:r.version,summary:r.summary,actualStart:r.actualStart??null,actualEnd:r.actualEnd??null,submittedBy:r.submittedBy,submittedAt:r.submittedAt,requiresExplicitApproval:!!b.requiresExplicitApproval},
+  quote:copy(r.quote),ruleVersion:r.ruleVersion??null}));
+ const consent={id:randomUUID(),actorId:actor,action:'approve_report',subjectId:r.id,revision:r.version,bookingId:b.id,
+  bookingRevision:input.expectedRevision,operationId:input.operationId,acceptedAt:at,conditionSnapshot,
+  conditionHash:createHash('sha256').update(JSON.stringify(canonical(conditionSnapshot))).digest('hex'),
+  quote:copy(conditionSnapshot.quote),ruleVersion:conditionSnapshot.ruleVersion};
+ s.consents.push(consent);return consent;
+}
+function ready(s,b,r,cause,at,actor,consentId=null){
  let x=s.settlements.find(x=>x.bookingId===b.id&&x.reportVersion===r.version);
- if(x?.status==='ready'&&(cause!=='explicit'||x.cause==='explicit'))return;
+ if(x?.status==='ready'&&cause!=='explicit')return;
  if(!Number.isSafeInteger(b.quote?.guardianTotal)||b.quote.guardianTotal<0)fail(409,'LEGACY_AMOUNT_UNKNOWN','成立時の総額が不明な旧合成予約は精算待ちにできません。');
- const fields={status:'ready',heldAt:null,holdReason:null,cause,approvedBy:cause==='explicit'?actor:null,approvedAt:cause==='explicit'?at:null,notifiedAt:r.notifiedAt??null,readyAt:at};
+ const fields={status:'ready',heldAt:null,holdReason:null,cause,consentId:cause==='explicit'?consentId:null,approvedBy:cause==='explicit'?actor:null,approvedAt:cause==='explicit'?at:null,notifiedAt:r.notifiedAt??null,readyAt:at};
  if(x)Object.assign(x,fields);else{s.settlements.push(x={id:randomUUID(),bookingId:b.id,reportVersion:r.version,quote:copy(b.quote),ruleVersion:b.ruleVersion??null,...fields});}
  b.status='settlement_ready';history(s,b,'settlement_ready',actor,at,{settlementId:x.id,reportVersion:r.version,cause});
 }
@@ -69,7 +89,8 @@ export function lifecycleCommand(s,actor,id,action,input,clock){
   if(!r||input.reportVersion!==b.currentReportVersion)fail(409,'REPORT_VERSION_CONFLICT','最新版の実績を確認してください。');
   if(!['awaiting_guardian','disputed','settlement_ready'].includes(b.status))fail(409,'INVALID_TRANSITION','現在は実績確認を操作できません。');
   if(action==='approve'){
-   ready(s,b,r,'explicit',at,actor);r.approval={actor,at};b.openDispute=false;
+   const consent=reportConsent(s,b,r,actor,at,input);
+   ready(s,b,r,'explicit',at,actor,consent.id);r.approval={actor,at,consentId:consent.id};b.openDispute=false;
    for(const d of s.disputes)if(d.bookingId===id&&!d.resolvedAt){d.resolvedAt=at;d.resolvedBy=actor;d.resolvedReportVersion=r.version;}
   }else if(action==='dispute'){
    if(typeof input.reason!=='string'||!input.reason.trim()||input.reason.length>2000)fail(422,'INVALID_REASON','異議の理由を1〜2000文字で入力してください。');

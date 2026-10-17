@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {createHash} from 'node:crypto';
 import {fixture,Store,start,quote} from './server.mjs';
 import {lifecycleCommand as command,lifecycleJobs,bookingView,lifecycleTick,mailOutcome} from './lifecycle-domain.mjs';
 const G='guardian-demo',S='sitter-aya',OTHER='guardian-third',DAY=86400000;
@@ -155,4 +156,43 @@ test('reapproval of a held version retains hold history and clears current hold 
  const x=scenario();x.report();x.act('approve',{reportVersion:1});x.act('dispute',{reportVersion:1,reason:'相談（合成）'});x.act('approve',{reportVersion:1});
  assert.equal(x.s.settlements[0].status,'ready');assert.equal(x.s.settlements[0].holdReason,null);
  assert.equal(x.s.lifecycleHistory.filter(h=>h.type==='settlement_held').length,1);
+});
+
+
+test('BC04 explicit consent binds saved conditions, report version and latest action; replay never duplicates consent',()=>{
+ const x=scenario();x.report();const before=x.s.bookings[0].revision;
+ const input={expectedRevision:before,operationId:'consent-original',reportVersion:1};
+ const first=command(x.s,G,'b','approve',input,x.clock),consent=structuredClone(x.s.consents[0]);
+ assert.equal(consent.actorId,G);assert.equal(consent.action,'approve_report');assert.equal(consent.subjectId,x.s.reports[0].id);
+ assert.equal(consent.revision,1);assert.equal(consent.bookingRevision,before);assert.equal(consent.acceptedAt,x.clock().toISOString());
+ assert.equal(consent.operationId,input.operationId);assert.deepEqual(consent.quote,x.s.bookings[0].quote);assert.equal(consent.ruleVersion,'saved-rule');
+ assert.deepEqual(consent.conditionSnapshot.booking.children,x.s.bookings[0].children);
+ assert.equal(consent.conditionSnapshot.booking.start,x.s.bookings[0].start);assert.equal(consent.conditionSnapshot.report.summary,x.s.reports[0].summary);
+ const stable=value=>Array.isArray(value)?value.map(stable):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(key=>[key,stable(value[key])])):value;
+ assert.equal(consent.conditionHash,createHash('sha256').update(JSON.stringify(stable(consent.conditionSnapshot))).digest('hex'));
+ assert.equal(first.booking.reports[0].approval.consentId,consent.id);assert.equal(x.s.settlements[0].consentId,consent.id);
+ assert.deepEqual(command(x.s,G,'b','approve',input,x.clock),first);assert.equal(x.s.consents.length,1);
+ x.s.users.find(u=>u.id===S).rate=9999;x.s.users[0].children=[];x.advance(1000);
+ x.act('dispute',{reportVersion:1,reason:'再確認（合成）'});x.act('report',{summary:'訂正した実績（合成）'});
+ assert.equal(x.s.reports[1].approval,undefined);assert.equal(x.s.settlements[0].status,'held');assert.deepEqual(x.s.consents[0],consent);
+ assert.throws(()=>x.act('approve',{reportVersion:1}),e=>e.code==='REPORT_VERSION_CONFLICT');assert.equal(x.s.consents.length,1);
+ x.act('approve',{reportVersion:2});const second=structuredClone(x.s.consents[1]);
+ assert.equal(second.subjectId,x.s.reports[1].id);assert.equal(second.revision,2);assert.notEqual(second.conditionHash,consent.conditionHash);
+ assert.deepEqual(second.quote,consent.quote);assert.deepEqual(second.conditionSnapshot.booking.children,consent.conditionSnapshot.booking.children);
+ assert.equal(x.s.settlements.find(s=>s.reportVersion===2).consentId,second.id);
+ x.advance(1000);x.act('approve',{reportVersion:2});const latest=x.s.consents[2],ready=x.s.settlements.find(s=>s.reportVersion===2);
+ assert.notEqual(latest.id,second.id);assert.equal(latest.conditionHash,second.conditionHash);
+ assert.equal(ready.consentId,latest.id);assert.equal(ready.approvedAt,latest.acceptedAt);assert.equal(x.s.reports[1].approval.consentId,latest.id);
+ assert.deepEqual(x.s.consents[0],consent);assert.deepEqual(x.s.consents[1],second);
+ assert.deepEqual(command(x.s,G,'b','approve',input,x.clock),first);assert.equal(x.s.consents.length,3);
+});
+test('BC04 consent save failure leaves no partial record; retry and restart retain original consent identity',async t=>{
+ const x=await runtime(t);await x.store.mutate(s=>{command(s,S,'b','start',{expectedRevision:0,operationId:'s'},x.clock);command(s,S,'b','end',{expectedRevision:1,operationId:'e'},x.clock);command(s,S,'b','report',{expectedRevision:2,operationId:'r',summary:'合成同意確認'},x.clock)});
+ const before=structuredClone(x.store.state),input={expectedRevision:3,operationId:'durable-consent',reportVersion:1};
+ x.store.failWrites=true;assert.equal((await x.call('/api/bookings/b/approve',G,input)).status,500);assert.deepEqual(x.store.state,before);
+ x.store.failWrites=false;const result=await x.call('/api/bookings/b/approve',G,input);assert.equal(result.status,200);
+ const consent=structuredClone(x.store.state.consents[0]);assert.equal(result.data.booking.consents[0].id,consent.id);
+ await new Promise(r=>x.server.close(r));await x.store.close();const restored=new Store(x.file);await restored.init();
+ assert.deepEqual(restored.state.consents[0],consent);assert.deepEqual(command(restored.state,G,'b','approve',input,x.clock),result.data);
+ assert.equal(restored.state.consents.length,1);assert.equal(restored.state.settlements[0].consentId,consent.id);await restored.close();
 });

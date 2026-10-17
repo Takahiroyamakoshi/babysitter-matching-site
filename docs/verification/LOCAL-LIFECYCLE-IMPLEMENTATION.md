@@ -1,8 +1,8 @@
-# Local lifecycle implementation — S01
+# Local lifecycle implementation — S01 / S02
 
 - task: local-lifecycle / LL01–LL09
 - implementer outcome: implementation and unit/API checks complete; independent verification, browser evidence and artifact review pending. This is not product-wide completion.
-- source revision: use `evidence/local-lifecycle/S01/revision.json`, captured from Git after this document and source are committed. No manually inferred SHA.
+- initial S01 source revision: use `evidence/local-lifecycle/S01/revision.json`, captured from Git after this document and source are committed. No manually inferred SHA.
 - audit inputs: BUSINESS-CONTRACTS.md / LOCAL-LIFECYCLE-PLAN.md; BUSINESS-CONTRACTS-AUDIT.md PASS, A01/A02 included.
 - external operations: none. No push, PR, merge, real mail, payment, production data, reset or deletion.
 
@@ -38,3 +38,16 @@
 README's new section gives a fresh isolated `evidence/local-lifecycle/browser-S01/store.json` and file clock launch on `http://127.0.0.1:8796`. Initial clock is 2026-10-20 09:00 JST. Create a normal booking for Oct 20 10:00–13:00 JST with transport 500, approve as Aya, advance clock to 10:00, open 成立予約・実績, start/end/report. After worker acceptance, switch guardian, open お知らせ→related booking. Cover approve; then dispute→chat→sitter correction→advance days without ready→guardian explicit approval. For a separate normal automatic path create another nonconflicting booking and advance exactly notification+24h. No fixed waiting or external connections required. The parent may create a different new browser directory if this one already exists; do not reset stores.
 
 Remaining boundaries: synthetic actor header is not production authentication; file-store single writer is not a production database; synthetic adapter acceptance is not actual delivery. No operations/support UI, amount-changing extensions, payment processing, real notifications, final D1–D4 decisions or public deployment are implemented. Drafts are component-local and persist across polling/error/reload-current-state, not across a full browser page reload or leaving that component. Persisted server state survives browser/server restart.
+
+
+## S02 — explicit consent binding correction
+
+Independent verification found BC04 was incomplete: the S01 `report.approval` stored only actor/time and could not attest to the accepted conditions (`evidence/local-lifecycle/independent/run-S02/explicit-consent-state.json`). The S01 self-tests did not cover this contractual requirement. No policy or acceptance criterion changed.
+
+The minimal correction adds an append-only `consents` collection. Every new explicit report approval records `actorId`, `action=approve_report`, report `subjectId/revision`, observed `bookingRevision`, `operationId`, `acceptedAt`, saved `quote/ruleVersion`, and `conditionSnapshot`. The snapshot binds the persisted booking participants/date/children/service/transport and the submitted report identity/version/text/actual times to that quote/rule. `conditionHash` is SHA-256 of recursively key-sorted JSON for the persisted snapshot. JSON normalization matches on-disk representation, and missing legacy fields remain null; current profiles are not consulted.
+
+The report approval and settlement point to the latest explicit `consentId`. A later explicit approval of the same version appends a new consent and updates the current reference/time without mutating earlier records. A correction keeps old consent/history, holds the old settlement, and requires consent for the new report. An original operation replay returns its original snapshot and creates no new consent. Old successful operations and historical `{actor,at}` approvals are not backfilled or rewritten.
+
+Two focused tests cover independent hash recomputation, snapshot/actor/revision/action binding, immutable earlier records, current-profile changes, stale-version rejection, corrected-version consent, latest explicit action linkage, same-ID replay, atomic save failure and restart identity. Full existing suite: **44/44 PASS** (18 lifecycle + 26 regression), output `evidence/local-lifecycle/S02/tests.txt`.
+
+Changed production code is only `lifecycle-domain.mjs` (Node server domain); `src/`, server routes, dependency tree and browser assets are unchanged. Previous typecheck/build and browser results may be carried forward on that explicit diff basis; independent review and the parent's new consent/failed-draft browser observations remain required. S02 source is fixed by `evidence/local-lifecycle/S02/revision.json` after commit; do not infer a SHA from this prose.
