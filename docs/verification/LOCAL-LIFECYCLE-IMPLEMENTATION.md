@@ -1,4 +1,4 @@
-# Local lifecycle implementation — S01 / S02
+# Local lifecycle implementation — S01 / S02 / S03
 
 - task: local-lifecycle / LL01–LL09
 - implementer outcome: implementation and unit/API checks complete; independent verification, browser evidence and artifact review pending. This is not product-wide completion.
@@ -51,3 +51,12 @@ The report approval and settlement point to the latest explicit `consentId`. A l
 Two focused tests cover independent hash recomputation, snapshot/actor/revision/action binding, immutable earlier records, current-profile changes, stale-version rejection, corrected-version consent, latest explicit action linkage, same-ID replay, atomic save failure and restart identity. Full existing suite: **44/44 PASS** (18 lifecycle + 26 regression), output `evidence/local-lifecycle/S02/tests.txt`.
 
 Changed production code is only `lifecycle-domain.mjs` (Node server domain); `src/`, server routes, dependency tree and browser assets are unchanged. Previous typecheck/build and browser results may be carried forward on that explicit diff basis; independent review and the parent's new consent/failed-draft browser observations remain required. S02 source is fixed by `evidence/local-lifecycle/S02/revision.json` after commit; do not infer a SHA from this prose.
+
+
+## S03 — sitter fee/proceeds display correction (F02)
+
+The artifact review found that booking/report detail omitted sitter fee/proceeds required by BC04 and LL09 (`evidence/local-lifecycle/artifact-review/REVIEW-S02.md`). `src/lifecycle.tsx` now includes optional saved `quote.fee/takeHome` in its booking type and renders those two rows only when the current actor is the booking's sitter. Labels identify the 15% fee and transport-excluded proceeds. The existing separate agreed-transport row and guardian total remain. Missing/null legacy values use the existing “旧データ：不明” formatter; no amount is calculated or filled from the current profile.
+
+This correction changes only the detail type/render and this evidence document. Server/domain/store/consents/quote arithmetic are unchanged. The 44-test S02 results and independently verified consent/state behavior carry forward by that scope; no arithmetic behavior changed, so no mirrored arithmetic test or full repeat was added. New verification: Windows Node TypeScript `--noEmit` PASS (exit 0); Windows Node Vite build PASS (19 modules; CSS 7.65 kB; JS 267.63 kB, `index-DSI9CW8J.js`). Exact commands use the existing Windows Node path and README cmd/pushd route recorded above.
+
+The parent retains the running isolated browser-S02 server/store; the implementer did not stop it or edit its data. Parent's pending checks are the refreshed built UI at 375px and 1280px for both roles, saved fee/proceeds vs guardian-only display, and legacy missing-value rendering. S03 target is the real Git capture `evidence/local-lifecycle/S03/revision.json`; source/docs are frozen after the correction commit. Independent artifact-review signoff remains required.
