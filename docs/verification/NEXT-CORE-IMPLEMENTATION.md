@@ -1,12 +1,14 @@
 # Next core implementation evidence
 
 - Scope: N1–N3 / NC01–NC09, audited NEXT-CORE design and technical plan v0.1.
-- Submission: S01. Exact source revision/tree is recorded by the harness in evidence/next-core/S01/revision.json after commit; no hand-written SHA is substituted.
+- Submission: S01. Exact source revision/tree is recorded by the harness in evidence/next-core/S01/finalcandidate/revision.json after commit; no hand-written SHA is substituted.
 - Implementation: profile-domain.mjs owns allowlisted profile/child/settings validation and shared JST availability; server.mjs connects /me ownership, revisions, immutable profile retry responses, atomic persistence, displayed-rate confirmation and snapshot-preserving acceptance. src/profile.tsx separates profile/child/settings editors from the existing request flow. src/action-state.mjs separates action busy ownership from stale-result/draft guards.
 - API response contract: GET /api/me and successful own mutations return {user}; guardian children are never exposed in bootstrap. POST child returns 201; PATCH mutations return 200. Unknown/non-own child 404, role violation 403, invalid fields 422, revision or changed price 409. Rule version local-demo-0.3-profile; schema remains 1.
 - Initial intentional failures: evidence/next-core/S01/initial-failing.log, 3 failing tests against the baseline (missing own API, missing displayed-price validation, missing atomic profile update).
-- Automated result: typecheck PASS; production build PASS; 25 tests PASS / 0 failures, including existing server/quote-state checks, seven new domain/API cases and asynchronous action identity regression. Raw output: evidence/next-core/S01/checks.log; command metadata: evidence/next-core/S01/commands.txt.
+- Automated result: typecheck PASS; production build PASS; 26 tests PASS / 0 failures, including existing server/quote-state checks, seven new domain/API cases and asynchronous action identity regression. Raw output: evidence/next-core/S01/finalcandidate/checks.log; command metadata: evidence/next-core/S01/finalcandidate/commands.txt.
 - Regression scope: ownership/allowlist/privacy, stable IDs and revision conflicts, failed-write rollback and same-ID retry, original profile response after later edits/restart, maximum-name round trip, date and 15-minute boundaries, JST weekdays and 24:00, old availability defaults, pending/confirmed snapshots across rate/child/availability changes, search/create/approve consistency, stale prices on increase/decrease, schema-1 old request/approval replay, transport consent, travel buffer and stale UI action/draft guards.
 - Browser/independent API/artifact review: delegated to parent and independent fixed specialists after source freeze. These are not asserted PASS by this implementation report.
 - Runtime: isolated port 8792 with a new evidence/data store; existing port 8787 process/data preserved. Runtime session and final data path are returned to the parent.
 - External push/PR/deployment/payment/email and real personal information: outside the authorized local synthetic scope.
+
+- Final candidate follow-up: pending quote/registration results are rejected after view exit, and restored request conditions do not revive a response from an older draft operation. Initial S01 source evidence remains preserved; this is a normal follow-up commit.

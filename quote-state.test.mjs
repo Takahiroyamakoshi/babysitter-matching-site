@@ -46,3 +46,15 @@ test('busy ownership releases after changed conditions while new message drafts 
  assert.equal(guard.current(old,'actor-a'),false);assert.equal(guard.finish(old),false);
  assert.equal(guard.current(latest,'actor-b'),true);assert.equal(guard.finish(latest),true);
 });
+
+test('view exit invalidates pending quotes and registrations; restored condition values do not adopt an earlier request draft',async()=>{
+ const {ActionGuard}=await import('./src/action-state.mjs');
+ const quotes=new QuoteGuard(),quote=quotes.begin('conditions');quotes.invalidate();
+ assert.equal(quotes.isCurrent(quote,'conditions'),false);
+ const actions=new ActionGuard(),registration=actions.begin('guardian|account');actions.invalidate();
+ assert.equal(actions.current(registration,'guardian|profile'),false);
+ assert.equal(actions.current(registration,'guardian|account'),false);
+ const request=actions.begin('same-conditions','operation-before-edit');
+ assert.equal(actions.sameDraft(request,'same-conditions','operation-after-edit-and-restore'),false);
+ assert.equal(actions.finish(request),true);
+});

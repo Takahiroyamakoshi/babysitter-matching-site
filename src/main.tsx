@@ -94,8 +94,8 @@ function App() {
   const [sending,setSending]=useState(false),[calculating,setCalculating]=useState(false),[searching,setSearching]=useState(false);
   const [error,setError]=useState(''),[notice,setNotice]=useState('');
   const guard=useRef(new QuoteGuard()),errorRef=useRef<HTMLDivElement>(null),contextRef=useRef(''),conversationRef=useRef(''),actorRef=useRef(actor),searchEpoch=useRef(0);
-  const actionOps=useRef<Record<string,string>>({}),actionGuard=useRef(new ActionGuard()),messageDraftRef=useRef(messageOp);
-  messageDraftRef.current=messageOp;
+  const actionOps=useRef<Record<string,string>>({}),actionGuard=useRef(new ActionGuard()),messageDraftRef=useRef(messageOp),requestDraftRef=useRef(requestOp),viewRef=useRef(tab);
+  messageDraftRef.current=messageOp;requestDraftRef.current=requestOp;viewRef.current=tab;
   const me=users.find(u=>u.id===actor),isSitter=me?.role==='sitter';
   const children:Child[]=conditions.birthDates.map((birthDate,i)=>({name:'対象児'+(i+1)+'（合成）',birthDate,relation:'保護者の子',care:'通常保育'}));
   const payload={sitterId:selected?.id,start:asIso(conditions.start),end:asIso(conditions.end),children,serviceType:'normal',...transportInput(transport)};
@@ -109,7 +109,7 @@ function App() {
   };
   useEffect(()=>{const target=actor;refresh().catch(e=>{if(actorRef.current===target)setError(e.message)});const timer=window.setInterval(()=>refresh().catch(()=>{}),15000);return()=>window.clearInterval(timer)},[actor]);
   useEffect(()=>{let live=true;const target=actor;api('/api/me',target).then(data=>{if(live&&actorRef.current===target)saveOwn(data.user)}).catch(e=>{if(live&&actorRef.current===target)setError(e.message)});return()=>{live=false}},[actor]);
-  useEffect(()=>{actionGuard.current.invalidate();setSending(false)},[tab,actor]);
+  useEffect(()=>{actionGuard.current.invalidate();guard.current.invalidate();setSending(false);setCalculating(false)},[tab,actor]);
   useEffect(()=>{if(error)errorRef.current?.focus()},[error]);
   useEffect(()=>{
     if(!selected)return;
@@ -118,7 +118,7 @@ function App() {
       .then(data=>{if(conversationRef.current===key)setMessages(data.messages)})
       .catch(e=>{if(conversationRef.current===key)setError(e.message)});
   },[conversationKey]);
-  const invalidate=()=>{guard.current.invalidate();setEstimate(invalidateEstimate<Quote>());setRequestOp(id());setCalculating(false)};
+  const invalidate=()=>{guard.current.invalidate();setEstimate(invalidateEstimate<Quote>());const op=id();requestDraftRef.current=op;setRequestOp(op);setCalculating(false)};
   const updateConditions=(next:Conditions)=>{invalidate();searchEpoch.current++;setSearching(false);setConditions(next);setSitters([]);setSearched(false);setError('');setNotice('条件を変更しました。概算と確認チェックを更新してください。')};
   const updateFilters=(next:Filters)=>{invalidate();searchEpoch.current++;setSearching(false);setFilters(next);setSitters([]);setSearched(false);setError('');setNotice('')};
   const switchActor=(next:string)=>{invalidate();searchEpoch.current++;setSearching(false);actorRef.current=next;conversationRef.current='';actionGuard.current.invalidate();setSending(false);setActor(next);ownRef.current=null;setOwn(null);setAcknowledged({});setConditions({start:dateValue(7,10),end:dateValue(7,13),birthDates:['']});setSelected(null);setMessages([]);setMessage('');setRequests([]);setSitters([]);setSearched(false);setTransport('');setTab(users.find(u=>u.id===next)?.role==='sitter'?'requests':'search');setError('');setNotice('');setMessageOp(id())};
@@ -161,11 +161,11 @@ function App() {
   };
   const submitRequest=async()=>{
     if(!canSubmitEstimate(estimate,currentKey)){setError('最新の概算・交通費提案額・総支払額と取消条件を確認してください。');return}
-    const key=currentKey,ticket=actionGuard.current.begin(currentKey);setError('');setSending(true);
+    const key=currentKey,ticket=actionGuard.current.begin(currentKey,requestOp);setError('');setSending(true);
     try {
       const data=await api('/api/requests',actor,{method:'POST',body:JSON.stringify({...payload,expectedRate:estimate.quote!.rate,acceptCancellation:estimate.acceptCancellation,acceptTransport:estimate.acceptTransport,operationId:requestOp})});
-      if(actionGuard.current.current(ticket,contextRef.current)){setRequests(old=>old.some(r=>r.id===data.request.id)?old:[...old,data.request]);setTab('requests');setNotice('正式依頼を送信しました。シッターが条件を確認して承認すると成立します。');invalidate()}
-    }catch(e:any){if(actionGuard.current.current(ticket,contextRef.current)){if(e.code==='PRICE_CHANGED')invalidate();setError(e.message)}}finally{if(actionGuard.current.finish(ticket))setSending(false)}
+      if(actionGuard.current.sameDraft(ticket,contextRef.current,requestDraftRef.current)){setRequests(old=>old.some(r=>r.id===data.request.id)?old:[...old,data.request]);setTab('requests');setNotice('正式依頼を送信しました。シッターが条件を確認して承認すると成立します。');invalidate()}
+    }catch(e:any){if(actionGuard.current.sameDraft(ticket,contextRef.current,requestDraftRef.current)){if(e.code==='PRICE_CHANGED')invalidate();setError(e.message)}}finally{if(actionGuard.current.finish(ticket))setSending(false)}
   };
   const respond=async(request:CareRequest,action:'approve'|'decline')=>{
     setError('');setSending(true);const target=actor,key=request.id+':'+action,ticket=actionGuard.current.begin(actor);
@@ -177,8 +177,15 @@ function App() {
   };
   const saveOwn=(user:OwnUser)=>{if(actorRef.current!==user.id||ownRef.current&&ownRef.current.id===user.id&&ownRef.current.profileRevision>user.profileRevision)return;ownRef.current=user;setOwn(user);setUsers(old=>old.map(u=>u.id===user.id?{...u,name:user.name,...(user.role==='sitter'?{rate:user.rate,region:user.region}: {})}:u))};
   const register=async(role:'guardian'|'sitter')=>{
-    const name=prompt('合成用の表示名を入力してください');if(!name)return;const target=actor;
-    try {const data=await api('/api/register',actor,{method:'POST',body:JSON.stringify({role,name})});if(actorRef.current!==target)return;await refresh();if(actorRef.current!==target)return;switchActor(data.user.id);setOwn(data.user);setTab('profile');setNotice(data.notice)}catch(e:any){if(actorRef.current===target)setError(e.message)}
+    const name=prompt('合成用の表示名を入力してください');if(!name)return;
+    const target=actor,ticket=actionGuard.current.begin(actor+'|'+tab);setSending(true);setError('');
+    const current=()=>actionGuard.current.current(ticket,actorRef.current+'|'+viewRef.current);
+    try{
+      const data=await api('/api/register',actor,{method:'POST',body:JSON.stringify({role,name})});
+      if(!current())return;await refresh(target);if(!current())return;
+      switchActor(data.user.id);setOwn(data.user);setTab('profile');setNotice(data.notice);
+    }catch(e:any){if(current())setError(e.message)}
+    finally{if(actionGuard.current.finish(ticket))setSending(false)}
   };
   const title=tab==='search'?(isSitter?'シッターの掲載を見る':'シッターを探す'):tab==='consult'?(selected?.name+'さんに相談'):tab==='request'?'保育料の概算を確認':tab==='requests'?(isSitter?'届いた依頼を確認':'予約・依頼を確認'):tab==='profile'?(isSitter?'自分のプロフィール':'お子さま・プロフィール'):tab==='settings'?'料金・空き時間':'合成デモに登録';
   const validEstimate=estimate.quote&&estimate.quoteKey===currentKey?estimate.quote:null;
@@ -219,7 +226,7 @@ function App() {
     {tab==='profile'&&own&&<ProfilePanel key={actor} user={own} onSaved={saveOwn}/>}
     {tab==='settings'&&isSitter&&own&&<SettingsEditor key={actor} user={own} onSaved={saveOwn}/>}
     {isSitter&&(tab==='requests'||tab==='profile')&&<section className="card"><h2>自分の掲載プレビュー・相談</h2><p>{own?.name} / {own?.region} / {own?.rate?yen(own.rate):''}（1人・1時間）</p><p>{own?.listingReady?'合成審査確認済み・掲載可':'合成確認待ち・掲載と受付はできません'}</p><button onClick={()=>{const sitter=users.find(u=>u.id===actor);if(sitter)openSitter(sitter as Sitter)}}>保護者との相談を開く</button></section>}
-    {tab==='account'&&<section className="grid"><div className="card"><h2>保護者の合成登録</h2><p>実情報なしで表示名だけを登録します。</p><button onClick={()=>register('guardian')}>合成保護者を登録</button></div><div className="card"><h2>シッターの合成登録</h2><p>資格・研修・届出・初回保険の合成確認待ちとして登録します。自己申告で掲載や受付はできません。</p><button onClick={()=>register('sitter')}>合成シッターを登録</button></div></section>}
+    {tab==='account'&&<section className="grid"><div className="card"><h2>保護者の合成登録</h2><p>実情報なしで表示名だけを登録します。</p><button disabled={sending} onClick={()=>register('guardian')}>合成保護者を登録</button></div><div className="card"><h2>シッターの合成登録</h2><p>資格・研修・届出・初回保険の合成確認待ちとして登録します。自己申告で掲載や受付はできません。</p><button disabled={sending} onClick={()=>register('sitter')}>合成シッターを登録</button></div></section>}
     <footer className="footer">ローカル合成デモ ・ 本人確認・メール・決済・病児対応なし</footer>
   </main>;
 }
