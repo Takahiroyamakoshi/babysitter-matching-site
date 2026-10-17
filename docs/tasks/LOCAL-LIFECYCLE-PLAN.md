@@ -4,12 +4,12 @@
 - requirement_ids: REQUIREMENTS v0.45 S01〜S03、§6/7/12/21/26/28/29/30、G10/G16/G17bのL部分、BUSINESS-CONTRACTS BC01〜04/06/07/08。全G16/G17bや公開準備の完了ではない。
 - dependencies: G00独立監査済全体計画、G01業務契約の当該範囲の独立設計/計画監査。既存G11/G12の合成通常単発snapshotと本人/児/役割資産を継承。
 - assigned_agent: 親から実装担当へ。独立検証・成果物レビューは別担当、実画面は親のCUA。
-- state: verification_in_progress
-- state_version: 4
+- state: correction_in_progress
+- state_version: 5
 - updated_at_utc: 2026-10-17
 - revision_record: v0.1 planner提案。状態遷移・実装開始・独立合格は親が別記録する。
 - cycle: initial
-- failed_submissions: 1
+- failed_submissions: 2
 - additional_used: false
 - pr / head / base / tested_revision: PRなし、ソース基準 d7fb83a02de9d280f8e7c0e1d5a657d01aa47ae3。実装対象版/証拠は提出時固定。
 - plan_approval_reference: PROJECT「Implementation-led continuation」。通常local合成実装は既許可、当該設計/計画は監査待ち。push/PR/merge/外部メール/決済/実情報/公開/削除は含めない。
@@ -112,3 +112,6 @@ Lでは通知のWeb保存と合成メールadapter受付を保存する。メー
 - S02 correction: immutable version-bound explicit consent record; no UI/policy changes. Parent CUA evidence evidence/local-lifecycle/browser-S01/cua-report.md.
 
 - S02 received: f64e6631550b6b67641f968bda9a9ae8f65b9189; evidence/local-lifecycle/S02/revision.json; domain/test/evidence-doc only; 44/44 PASS. Independent consent-focused recheck and parent restarted-server UI observation pending.
+
+- S02 independent API PASS; F01 closed,3focused groups and5independent Python hash validations. Parent UI network failure/input retention/same-content retry/restart/actor switch PASS; evidence/browser-S02/cua-report.md.
+- S02 failed once for artifact F02: sitter fee/takehome missing in lifecycle detail (BC04/LL09). evidence/local-lifecycle/artifact-review/REVIEW-S02.md. S03 limited UI snapshot display correction, no business policy changes.
