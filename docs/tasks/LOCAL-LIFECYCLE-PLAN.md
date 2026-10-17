@@ -4,8 +4,8 @@
 - requirement_ids: REQUIREMENTS v0.45 S01〜S03、§6/7/12/21/26/28/29/30、G10/G16/G17bのL部分、BUSINESS-CONTRACTS BC01〜04/06/07/08。全G16/G17bや公開準備の完了ではない。
 - dependencies: G00独立監査済全体計画、G01業務契約の当該範囲の独立設計/計画監査。既存G11/G12の合成通常単発snapshotと本人/児/役割資産を継承。
 - assigned_agent: 親から実装担当へ。独立検証・成果物レビューは別担当、実画面は親のCUA。
-- state: verification_in_progress
-- state_version: 6
+- state: complete
+- state_version: 7
 - updated_at_utc: 2026-10-17
 - revision_record: v0.1 planner提案。状態遷移・実装開始・独立合格は親が別記録する。
 - cycle: initial
@@ -117,3 +117,11 @@ Lでは通知のWeb保存と合成メールadapter受付を保存する。メー
 - S02 failed once for artifact F02: sitter fee/takehome missing in lifecycle detail (BC04/LL09). evidence/local-lifecycle/artifact-review/REVIEW-S02.md. S03 limited UI snapshot display correction, no business policy changes.
 
 - S03 received: e8690718e1eee4a721d0df5ea66406cfc50b9ae5; evidence/local-lifecycle/S03/revision.json. UI snapshot-only fee/takehome display, guardian hidden, missing legacy unknown; typecheck/build PASS. Final role/viewport CUA and artifact review pending.
+
+## Final acceptance
+- LL01-09 limited local increment complete; source e8690718e1eee4a721d0df5ea66406cfc50b9ae5, independently verified/reviewed target865139aa7a7e8bd4a7071771fb63eda35859ad27.
+- verification: docs/verification/LOCAL-LIFECYCLE.md; artifact review docs/reviews/LOCAL-LIFECYCLE.md PASS; blockers0. S01F01/S02F02 resolved inS02/S03; failed_submissions2 retained.
+- final_revision_record: evidence/local-lifecycle/final/revision.json (documentation-only completion commit).
+- remaining: product-wide G10/G16/G17b and R/P, D1-D4, other checklist tasks remain. Next candidate G15 local approved changes/extensions, with concrete task audit before source edits.
+- child_or_process_state: implementer/verifier/reviewer complete; isolated preview8796 running. No uncertain external operations.
+- usage_and_source: unavailable; no session usage metadata supplied.

@@ -44,3 +44,10 @@ This is completion of the first local synthetic increment, not of the complete m
 - Design: docs/design/TECH-STACK.md; current primary-source comparisons: docs/research/TECH-INFRA.md and docs/research/TECH-PAYMENTS.md.
 - Scope: researched recommendation, fee arithmetic and adoption gates. Runtime/concurrency/restore/payment PoCs and external contracts are not completed by these documents. G01/G03/G05 remain open beyond this research step.
 - Independent design audit: docs/design/TECH-STACK-AUDIT.md PASS for TECH-STACK v1.0 / TECH-INFRA v1.0 / TECH-PAYMENTS v0.2. Five audit findings resolved; source changes and runtime PoCs are not part of this pass.
+
+## Local lifecycle LL01-LL09 (2026-10-17)
+- G01 contract/design and limited plan audit PASS: docs/design/BUSINESS-CONTRACTS-AUDIT.md.
+- Source e8690718e1eee4a721d0df5ea66406cfc50b9ae5; independently verified/reviewed target865139aa7a7e8bd4a7071771fb63eda35859ad27.
+- docs/verification/LOCAL-LIFECYCLE.md; docs/reviews/LOCAL-LIFECYCLE.md PASS, blockers0.44 automated tests; independent API/domain/focused consent checks/integrated smoke; parent CUA375/1280 including actual communication failure/retry and role-specific amounts. Counts are separate evidence units.
+- S01F01 consent snapshot/hash and S02F02 sitter proceeds display resolved; original failures retained.
+- Preview http://127.0.0.1:8796 uses isolated synthetic data/clock. No actual delivery/charge/payout/auth/deployment; G10/G16/G17b full tasks and overall product remain incomplete.
