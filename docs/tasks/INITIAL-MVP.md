@@ -5,8 +5,8 @@
 - dependencies: REQUIREMENTS.md v0.44; IMPLEMENTATION.md v0.2 の独立設計・計画レビュー
 - acceptance_and_verification: 下記の受入表・作業順を満たす。ソース版と試験・画面証拠を一致させる。
 - assigned_agent: harness_implementer (initial_implementation), then independent verification and artifact review
-- state: verifying
-- state_version: 6
+- state: complete
+- state_version: 8
 - updated_at_utc: 2026-10-17
 - revision_record: 文書 v0.2。コード未作成・未検証。
 - cycle: initial
@@ -55,18 +55,18 @@
 - 2026-10-17: 親より当日中に確認できるローカル初回増分へ限定、運営 AI 詳細は後続という指示を受領。
 
 ## Parent transition
-- state_version: 6
+- state_version: 8
 - design_plan_audit: docs/design/INITIAL-AUDIT.md; design/plan v0.2 passed
 - execution: authorized local initial scope; no remote/PR/deployment
 
 ## Parent verification transition
-- state_version: 6
+- state_version: 8
 - source_submission: 4e305da8e9b5fca49c53e992785811d3abdeecf0
 - implementation_checks: typecheck PASS; build PASS; tests 5/5 PASS
 - next: independent browser/API verification; source frozen
 
 ## First verification result
-- state_version: 6
+- state_version: 8
 - tested_revision: b86b986fa501aa85add04815d07dd10f3d306b7e
 - result: needs-correction; first submission counted once
 - verified: typecheck/build/test5; API21/21; boundaries17/18; persistence5/5
@@ -74,13 +74,13 @@
 - evidence: evidence/initial-verification/
 
 ## Corrected submission verification
-- state_version: 6
+- state_version: 8
 - source_submission: d622eb9db93dc774cbf43accf9837d795d061d96
 - checks: typecheck/build PASS; regressions8/8 PASS
 - next: independent re-verification, source frozen
 
 ## S02 independent result
-- state_version: 6
+- state_version: 8
 - tested_revision: b15951be9f9b5a13601351b9289a76cdf08ba046
 - result: needs-correction; second submission counted once
 - passes: medical approval recheck; 30min travel gap; isolated real CLI stop/restart
@@ -88,7 +88,24 @@
 - evidence: evidence/initial-verification/S02/
 
 ## S03 verification handoff
-- state_version: 6
+- state_version: 8
 - source_submission: 99d087a3d0a67709ca101967fd11dd0b2dc2e554
 - checks: typecheck/build/test8 PASS; implementer Edge UI regressions PASS
 - next: independent targeted regressions and full desktop/mobile flow
+
+## Independent verification PASS
+- state_version: 8
+- product_revision: 99d087a3d0a67709ca101967fd11dd0b2dc2e554
+- current_verified_metadata_revision: e5d1ac04235c31943803ecdcf5b5f7d4722ae52d
+- result: L01-L08 PASS; desktop/mobile full flow; API; persistence; retry
+- report: docs/verification/INITIAL-VERIFICATION.md
+- metadata_changes: concurrent agent configuration only; product diff zero; no branch restoration
+- known_minor_issue: favicon resource missing, no functional API impact
+
+## Initial local increment complete
+- state_version: 8
+- verification: docs/verification/INITIAL-VERIFICATION.md PASS
+- artifact_review: docs/review/INITIAL-ARTIFACT-REVIEW.md PASS
+- code_revision: 99d087a3d0a67709ca101967fd11dd0b2dc2e554
+- scope: local synthetic initial increment only; not full product or production readiness
+- remaining_product: production auth/qualification workflow, meetings/escort/recurrence/extensions, payments, operations AI and release checks

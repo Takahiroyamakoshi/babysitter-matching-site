@@ -1,5 +1,62 @@
 # 初回ローカル実装 成果物レビュー
 
+## 最終判定 S03
+
+**PASS / complete**。登録・検索・両者チャット・通常保育の正式依頼・承認/辞退というローカル合成データの初回増分に、未解決の重大指摘はない。L01–L08の独立検証、ソース差分、実画像を照合した。製品全体・本番適合・公開の合格ではない。
+
+- レビュー対象 HEAD: `e5d1ac04235c31943803ecdcf5b5f7d4722ae52d`
+- 対象 tree: `1c425488380057ac790442bf8a0f11c769631246`
+- 最新版記録: `evidence/initial-local-mvp/S03/merged-config-revision.json`
+- 実ブラウザー検証に渡した版: `527a2247cb0c93cfd192a84bbee52794eb7147aa`
+- S03製品実装版: `99d087a3d0a67709ca101967fd11dd0b2dc2e554`
+- 独立検証結果: `docs/verification/INITIAL-VERIFICATION.md`（L01–L08 pass）
+- 本レビュー文書と検証文書は後照合の完了後に保存した。これらを含む最終文書コミット自体は、現時点ではまだ検証対象コミットではない。親がその版を採取し、製品ソース無変更の差分確認を記録して引き継ぐ。
+
+### 版の引継ぎ根拠
+
+レビュー担当はS03の旧版記録を03:51:23Zに照合し、HEAD/tree/clean-tree一致を確認した。その後、別作業のagent設定変更によってHEADが変わったため旧SHA一致とは扱わず、新しい版記録へ切り替えた。
+
+`527a2247cb0c93cfd192a84bbee52794eb7147aa` → `9581001c8831b2b0eb5088e862de120451c22162` の差分は .codex agent/config、.gitignore、.harness/roles/parent.md。server、tests、src、package/lock、index、Vite、tsconfig、READMEの製品差分は `git diff --exit-code` で0。レビュー担当は9581001版の完全SHA/tree/clean-treeも03:59:22Zに再照合した。最終e5d1ac版は9581001版とtreeが完全に同一であり、merged-config版記録と実Gitの完全SHA/treeを照合した。独立検証担当も最終版記録の後照合を済ませている。
+
+S02→S03の製品変更は画面の同意状態・会話分離のみ。サーバー・テスト・READMEは無変更なのでS02の医療条件/移動間隔/CLI再起動証拠を持ち越す。S01の不合格試験を合格として流用せず、修正した条件はS02/S03の新証拠で置き換えた。
+
+### 指摘の解消
+
+| 指摘 | 解消根拠 |
+|---|---|
+| B1 見積り消失・同意保持 | 同意操作では見積りを保持し、日時・人数・相手変更では見積りと同意を解除。S03 consent-reset.jsonとdesktop/mobile正常動線で確認。 |
+| B2 取消条件の未表示 | 見積り画面に日本時間基準、0/50/100%、実費、15/85%を表示。S03実画像をレビュー担当も確認。 |
+| B3 旧会話表示 | actor/sitter/guardianの組を照合し、会話切替時に旧表示を解除。有効な保護者を初期選択。S03 conversation-isolation.jsonで遅延A応答後もB選択・B会話を保持、console/page errorなし。 |
+| B4 検索入力未接続 | 地域・資格・上限時給を画面からAPIへ接続。ソース差分と独立検索/正常動線で確認。 |
+| B5 辞退UI・表示 | 受信シッターの辞退操作と「辞退」表示を追加。desktop-full-flow.jsonとdesktop-06-declined.pngで確認。 |
+| B6 承認再送 | 操作IDを保持し送信中ボタンを無効化。missing-boundaries.jsonで同IDの承認再送が同じ予約を返す。ブラウザーの応答消失試験はチャット送信で実施し、下書き保持・再送・保存1件を確認。 |
+| B7 承認医療再検査 | 保存済み種別と医療フラグを承認時にも検査。S02 api-regressions.jsonでmedical=trueを422拒否。 |
+| B8 正常移動間隔の拒否 | Dateをepoch値に変換して比較。S02 api-regressions.jsonで30分ちょうどの依頼201/承認200、近接枠409を確認。 |
+
+### 最終証拠
+
+- `evidence/initial-verification/S03/desktop-full-flow.json`: Edge 1280×1000で新規保護者登録→検索→相談→シッター返信→依頼→承認・辞退。自動操作の重複ラベルassertionは最終状態と実画像で照合済み。
+- `evidence/initial-verification/S03/mobile-full-flow.json`: 375×812で登録→検索・相談→返信→正式依頼→承認。badResponses/consoleErrors/pageErrors/externalは空。レビュー担当もmobile-04-confirmed.pngとdesktop-06-declined.pngを読み、日本語と主要画面を確認。
+- `evidence/initial-verification/S03/consent-reset.json`、`conversation-isolation.json`: S02の残件2件がpass。対応PNGも直接確認。
+- `evidence/initial-verification/S03/response-loss-retry.json`: サーバー保存201後に応答を失っても下書きを保持し、再送後の保存メッセージは1件。初回の集計対象シッター違いは保存全体で照合し訂正済み。
+- `evidence/initial-verification/S03/missing-boundaries.json`: 9/9。四種審査条件の個別拒否、1歳境界、24時間未満で開始時刻を期限とする直前/ちょうど、承認再送、プロフィール単価変更後の価格snapshot維持。
+- `evidence/initial-verification/S02/api-regressions.json`: 移動30分境界と保存医療条件再検査の2/2。
+- `evidence/initial-verification/S02/cli-restart.json`: 隔離CLI停止・再起動後の登録/相談/依頼/成立予約復元。
+- 初期 `api-rules.json` 21/21、`persistence.json` 5/5、`request-boundaries.json` の変更影響のない成功条件を、S02/S03差分と照合して持ち越す。初期の不適切な29分セットアップと不合格結果は合格数に含めない。
+- tsc、Vite build、server.test.mjs 8/8 passは最終独立検証文書で確認。
+
+### 軽微な残件・限界
+
+`evidence/initial-verification/S03/favicon-console-observation.json` のとおり、未配置の /favicon.ico が500となる。API・画面例外・主要動線への影響は観測されず、機能合格を妨げない。desktop-statuses.jsonの旧pass=falseはこの観測を含むため保持し、正常動線の最終状態照合と混同しない。
+
+今回の動作証拠はローカルEdge、合成fixture、単一writerの範囲。ブラウザーの応答消失試験はチャットで、承認再送はAPIと画面実装の照合で確認した。すべての通信競合・全キーボード操作・長時間稼働・破損形式の網羅試験を実施したという意味ではない。プロフィール/カレンダー編集、本番認証、実個人情報、決済、メール、医療サービス、配備・公開は対象外のまま。
+
+---
+
+## S01/S02の履歴（以下のneeds-correctionは当時の対象版に対する判定）
+
+# 初回ローカル実装 成果物レビュー
+
 - 判定: **needs-correction**。ローカル増分の完成条件は未達。公開・製品全体の評価ではない。
 - 対象 HEAD: b86b986fa501aa85add04815d07dd10f3d306b7e
 - 対象 tree: b62a08694cef94beb941972c712d186776dc1fc0
