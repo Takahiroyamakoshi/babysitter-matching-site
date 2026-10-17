@@ -26,3 +26,12 @@ This is completion of the first local synthetic increment, not of the complete m
 - Evidence: evidence/ux-refresh/S01/, independent/, images15-23. Final preview image24; preview http://127.0.0.1:8787.
 - Scope: separate request/sitter forms, clear validation/titles/cards, conditional tabs, chat condition editing, guardian estimate/transport proposals and mutual confirmation, saved-price/operation compatibility.
 - Limits: no forced browser network failure or full WCAG audit; actual auth/payment/email and full sidebar remain outside this increment.
+
+## Next core increment NC01-NC09
+- Product/source: 483a43c5dacf39ebdd27bef58eb25e51b6c64fb6 (S02).
+- Design/plan: docs/design/NEXT-CORE.md v0.1, docs/tasks/NEXT-CORE.md technical v0.1; independent design/plan audit PASS.
+- Added role navigation, own profile/child add-edit and saved child selection, sitter rates/weekly availability/date exceptions, owner allowlists/private child projection/revision checks, stale-rate request prevention and fixed saved conditions.
+- Verification: docs/verification/NEXT-CORE.md; implementation typecheck/build/26 tests PASS; independentAPI11 groups (initial10 PASS plus corrected oracle group PASS, 188+4 HTTP observations); parent CUA registration through confirmation, profiles, saved children, rate/schedule changes, revision conflict, desktop/mobile.
+- Artifact review: docs/reviews/NEXT-CORE.md PASS. S01 native prompt acceptance blocked, S02 inline form fixed; original evidence retained. API/domain exact hashes unchanged across UI correction; relevant API evidence carried.
+- Local preview: http://127.0.0.1:8787; original data preserved in a new preview snapshot. Final image evidence/next-core/parent/22-preview-8787-profile.png.
+- Limits: no real auth/PII/payment/email/deploy, forced browser disconnect/delay or exhaustive accessibility audit. Remaining marketplace roadmap stays in design.

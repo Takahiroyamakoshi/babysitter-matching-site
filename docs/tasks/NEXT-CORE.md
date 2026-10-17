@@ -1,14 +1,14 @@
 # Next core increment
 - id: next-core
-- state: verifying
-- state_version: 6
+- state: complete
+- state_version: 7
 - trial: S02
 - failed_submissions: 1
 - authorization: user explicitly requested continued implementation after quarter-hour fix. Ordinary design delegated; proceed local synthetic functionality.
 - scope_candidate: role-appropriate navigation, own child/profile management, sitter rate/availability management connected to search and request acceptance. Planner to prioritize a coherent bounded increment from current requirements.
 - constraints: existing UI accepted; preserve 15-minute input and search/chat/estimate behavior. No production auth, real PII/documents, payments, external email, deploy/push/PR, destructive reset/delete.
 - acceptance: source-specific design audit, implementation tests, actual app checks, independent review; retain old data/snapshots/operation replay.
-- next_action: implement N1-N3 under independent design/plan v0.1 PASS.
+- next_action: next-core complete; remaining product roadmap in design.
 
 ## Technical plan v0.1
 - design_revision: docs/design/NEXT-CORE.md v0.1
@@ -78,7 +78,7 @@
 
 ## Technical plan remaining
 - independent_audit: design/technical plan v0.1 PASS; docs/design/NEXT-CORE-AUDIT.md.
-- implementation / tests / browser / artifact_review: not yet performed by planner.
+- implementation / tests / browser / artifact_review: completed by assigned roles; see completion and reports.
 - remaining_product: see design roadmap; favorites/inbox and full marketplace are outside this increment.
 
 
@@ -114,3 +114,14 @@
 - S02 inline registration form implemented; typecheck/build/26 tests reportedPASS.
 - awaiting clean S02 source capture; then actual registration and own-editor/full request browser flow.
 - S01 independentAPI11groups carry requires API/domain hash unchanged; raworaclecorrection retained.
+
+## Parent completion v7
+- state: complete; state_version:7; final source trial:S02.
+- source_revision: 483a43c5dacf39ebdd27bef58eb25e51b6c64fb6.
+- acceptance: NC01-NC09 complete within local synthetic scope. Typecheck/build/26 tests PASS; independentAPI11 groups covered with explicit oracle correction; parent CUA S02 registration through approval and prior unchanged-flow observations; independent artifact review PASS.
+- records: docs/verification/NEXT-CORE.md; docs/reviews/NEXT-CORE.md; evidence/next-core/{S02,independent,parent}/.
+- preview: http://127.0.0.1:8787; server session31611; data/next-core-preview-20261017.json is a new snapshot of preserved original data/ux-refresh-preview-20261017.json. No store/lock deletion or reset.
+- remaining_this_increment: none. Browser forced disconnect/delay and full WCAG/all-browser audit remain untested, not claimed.
+- remaining_product: design roadmap contains favorites/conversation inbox/calendar, meeting/escort/regular/extension/change, actuals/settlement/operations, production auth/cloud. These are not implemented by this increment.
+- final_document_commit: only reports/task/status/evidence index; capture new revision and carry source/test verdict only after product diff is empty.
+- usage: unknown.
