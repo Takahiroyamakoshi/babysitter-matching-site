@@ -18,7 +18,7 @@ Use the bundled Windows Node through WSL. The Vite build must finish before star
 wsl -d Ubuntu -- bash -lc "cd /home/takahiro/project/babysitter-matching && /mnt/c/Users/PC_User/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe node_modules/vite/bin/vite.js build && /mnt/c/Users/PC_User/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe server.mjs"
 ~~~
 
-Open http://127.0.0.1:8787 and stop with Ctrl+C. Data persists at data/local-demo.json. A normal Ctrl+C releases the single-writer lock. After an abnormal process termination, confirm no server process remains before removing data/local-demo.json.lock.
+Open http://127.0.0.1:8787 and stop with Ctrl+C. Data persists at data/local-demo.json. For an isolated run, append --port 8790 --data data/isolated.json to server.mjs. A normal Ctrl+C releases the single-writer lock. After an abnormal process termination, confirm no server process remains before removing data/local-demo.json.lock.
 
 ## Validate
 

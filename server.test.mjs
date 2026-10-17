@@ -52,3 +52,39 @@ test('unknown Host and cross-origin mutations are refused',async()=>{
   const r=await fetch('http://127.0.0.1:'+port+'/api/register',{method:'POST',headers:{'content-type':'application/json','host':'example.test','origin':'https://example.test'},body:'{}'});
   assert.equal(r.status,403);await new Promise(resolve=>server.close(resolve));await store.close();
 });
+
+test('approval rechecks persisted medical flags and refuses a tampered pending request',async()=>{
+  const dir=await mkdtemp(path.join(tmpdir(),'sitter-medical-')), file=path.join(dir,'state.json');
+  const {server,store}=await start({dataFile:file,port:0}), port=server.address().port;
+  const call=async(p,actor,body)=>{const r=await fetch('http://127.0.0.1:'+port+p,{method:'POST',headers:{'content-type':'application/json','x-demo-actor':actor},body:JSON.stringify(body)});return [r,await r.json()]};
+  const [created,data]=await call('/api/requests','guardian-demo',{...good(),sitterId:'sitter-aya',acceptCancellation:true,operationId:'medical-request'});
+  assert.equal(created.status,201); store.state.requests[0].medical=true;
+  const [approval]=await call('/api/requests/'+data.request.id+'/approve','sitter-aya',{operationId:'medical-approve'});
+  assert.equal(approval.status,422); assert.equal(store.state.requests[0].status,'pending');
+  await new Promise(resolve=>server.close(resolve));await store.close();
+});
+
+test('travel buffer allows exactly 30 minutes and refuses a closer confirmed-slot request',async()=>{
+  const dir=await mkdtemp(path.join(tmpdir(),'sitter-buffer-')), file=path.join(dir,'state.json');
+  const {server,store}=await start({dataFile:file,port:0}), port=server.address().port;
+  const call=async(p,actor,body)=>{const r=await fetch('http://127.0.0.1:'+port+p,{method:'POST',headers:{'content-type':'application/json','x-demo-actor':actor},body:JSON.stringify(body)});return [r,await r.json()]};
+  const make=async(start,end,key)=>{const [r,d]=await call('/api/requests','guardian-demo',{...good({start,end}),sitterId:'sitter-aya',acceptCancellation:true,operationId:key});assert.equal(r.status,201);return d.request;};
+  const first=await make('2026-10-20T10:00:00+09:00','2026-10-20T13:00:00+09:00','b1');
+  assert.equal((await call('/api/requests/'+first.id+'/approve','sitter-aya',{operationId:'a1'}))[0].status,200);
+  const exact=await make('2026-10-20T13:30:00+09:00','2026-10-20T16:30:00+09:00','b2');
+  assert.equal((await call('/api/requests/'+exact.id+'/approve','sitter-aya',{operationId:'a2'}))[0].status,200);
+  const [near]=await call('/api/requests','guardian-demo',{...good({start:'2026-10-20T16:45:00+09:00',end:'2026-10-20T19:45:00+09:00'}),sitterId:'sitter-aya',acceptCancellation:true,operationId:'b3'});
+  assert.equal(near.status,409);
+  await new Promise(resolve=>server.close(resolve));await store.close();
+});
+
+test('search rejects medical flags and applies qualification and rate filters',async()=>{
+  const dir=await mkdtemp(path.join(tmpdir(),'sitter-search-')), file=path.join(dir,'state.json');
+  const {server,store}=await start({dataFile:file,port:0}), port=server.address().port;
+  const base='region=%E6%9D%B1%E4%BA%AC&start=2026-10-20T10%3A00%3A00%2B09%3A00&end=2026-10-20T13%3A00%3A00%2B09%3A00&children='+encodeURIComponent(JSON.stringify(good().children));
+  const medical=await fetch('http://127.0.0.1:'+port+'/api/search?'+base+'&medical=true',{headers:{'x-demo-actor':'guardian-demo'}});
+  assert.equal(medical.status,422);
+  const filtered=await fetch('http://127.0.0.1:'+port+'/api/search?'+base+'&qualification='+encodeURIComponent('幼稚園教諭')+'&maxRate=2000',{headers:{'x-demo-actor':'guardian-demo'}});
+  assert.equal((await filtered.json()).sitters[0].id,'sitter-yui');
+  await new Promise(resolve=>server.close(resolve));await store.close();
+});
