@@ -107,3 +107,10 @@ fieldset legend{font-size:1.18rem;font-weight:750;padding:0 8px;margin-left:-8px
 .prices .total{font-size:.95rem}
 }
 
+
+.editor-fields{border:0;padding:0;margin:0;display:grid;gap:1rem;min-width:0}
+.profile-layout{display:grid;gap:1.5rem}.profile-layout>.card{max-width:42rem}
+.availability-slot{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.75rem;padding:.75rem 0;border-bottom:1px solid #d9e3e1}
+.availability-slot label{min-width:0}.exception{padding:1rem;background:#f3f7f6;border-radius:.75rem}
+.child-condition{display:grid;gap:.75rem;border-top:1px solid #d9e3e1;padding-top:1rem}
+@media(max-width:500px){.availability-slot{grid-template-columns:1fr 1fr}.availability-slot label:first-child{grid-column:1/-1}}

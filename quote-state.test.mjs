@@ -32,3 +32,17 @@ test('empty transport never becomes zero, explicit zero remains valid',()=>{
   assert.deepEqual(transportInput(''),{});assert.deepEqual(transportInput('  '),{});
   assert.deepEqual(transportInput('0'),{transportAmount:0});assert.deepEqual(transportInput('500'),{transportAmount:500});
 });
+
+test('busy ownership releases after changed conditions while new message drafts and new actors reject old results',async()=>{
+ const {ActionGuard}=await import('./src/action-state.mjs');const guard=new ActionGuard();
+ const request=guard.begin('old-conditions');
+ assert.equal(guard.current(request,'new-conditions'),false);
+ assert.equal(guard.finish(request),true);
+ const message=guard.begin('conversation','sent-draft');
+ assert.equal(guard.current(message,'conversation'),true);
+ assert.equal(guard.sameDraft(message,'conversation','new-draft'),false);
+ assert.equal(guard.finish(message),true);
+ const old=guard.begin('actor-a');guard.invalidate();const latest=guard.begin('actor-b');
+ assert.equal(guard.current(old,'actor-a'),false);assert.equal(guard.finish(old),false);
+ assert.equal(guard.current(latest,'actor-b'),true);assert.equal(guard.finish(latest),true);
+});

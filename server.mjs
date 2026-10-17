@@ -5,7 +5,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 
-const RULE_VERSION = 'local-demo-0.2-transport';
+import { allowFields, syntheticName, childFields, scheduleFields, effectiveSchedule, withinAvailability, revisionCheck, ownUser } from './profile-domain.mjs';
+
+const RULE_VERSION = 'local-demo-0.3-profile';
 const MAX_RATE = 10000;
 const BUFFER_MINUTES = 30;
 const loopbackHost = /^(127\.0\.0\.1|localhost)(:\d+)?$/;
@@ -93,11 +95,6 @@ export function quote(input, sitter, clock=now) {
   const service=Math.floor(base+night), fee=Math.floor(service*.15);
   return {slot, quote:{rate:sitter.rate, children:count, hours, base, nightSurcharge:night, service, fee, takeHome:service-fee, transport, transportStatus:transport===null?'pending':'proposed', guardianTotal:transport===null?null:service+transport, currency:'JPY', note:'税区分・実請求は含まれないローカルデモ見積りです。'}};
 }
-function withinAvailability(sitter,start,end) {
-  const a=new Date(+new Date(start)+9*3600000), b=new Date(+new Date(end)+9*3600000);
-  const open=sitter.availability||{startMinute:0,endMinute:1440};
-  return a.getUTCFullYear()===b.getUTCFullYear()&&a.getUTCMonth()===b.getUTCMonth()&&a.getUTCDate()===b.getUTCDate()&&a.getUTCHours()*60+a.getUTCMinutes()>=open.startMinute&&b.getUTCHours()*60+b.getUTCMinutes()<=open.endMinute;
-}
 function conflict(bookings,sitterId,start,end) {
   const a=atJst(start), b=atJst(end);
   return bookings.some(x=>{
@@ -161,7 +158,7 @@ function listSitters(state, query, clock) {
     try { quote({start,end,children,serviceType:query.serviceType||'normal'},s,clock); return withinAvailability(s,start,end)&&!conflict(state.bookings,s.id,start,end); } catch { return false; }
   }).map(publicSitter);
 }
-const publicSitter=({id,role='sitter',name,region,rate,transport,qualifications,ageMonths,capacity})=>({id,role,name,region,rate,transport,qualifications,ageMonths,capacity});
+const publicSitter=(u)=>{const {id,role='sitter',name,region,rate,transport,qualifications,ageMonths,capacity}=u;return {id,role,name,region,rate,transport,qualifications,ageMonths,capacity,availabilitySchedule:effectiveSchedule(u),listingReady:isVerified(u)};};
 const body=async(req)=>new Promise((resolve,reject)=>{let data='';req.on('data',x=>{data+=x;if(data.length>100000)reject(new Error('too large'));});req.on('end',()=>{try{resolve(data?JSON.parse(data):{});}catch{reject(Object.assign(new Error('JSON'),{status:400,code:'INVALID_JSON'}));}});});
 const send=(res,status,payload)=>{res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store'});res.end(JSON.stringify(payload));};
 function security(req) {
@@ -175,14 +172,50 @@ export function createHandler(store, clock=now) {
       const url=new URL(req.url,'http://127.0.0.1:8787'), actor=req.headers['x-demo-actor'];
       if(req.method!=='GET'&&!req.headers['content-type']?.includes('application/json')) err(415,'JSON_REQUIRED','変更はJSONで送信してください。');
       if(url.pathname.startsWith('/api/')&&(!actor||Array.isArray(actor)||!store.state.users.some(u=>u.id===actor))) err(401,'UNKNOWN_ACTOR','デモ利用者を選択してください。');
-      if(req.method==='GET'&&url.pathname==='/api/bootstrap') { const result=await store.mutate(s=>{expireRequests(s,clock);return {users:s.users.map(u=>u.role==='sitter'?publicSitter(u):{id:u.id,role:u.role,name:u.name,children:u.children||[]}),requests:s.requests.filter(r=>r.guardianId===actor||r.sitterId===actor),bookings:s.bookings.filter(b=>b.guardianId===actor||b.sitterId===actor)};}); return send(res,200,result); }
+      if(req.method==='GET'&&url.pathname==='/api/bootstrap') { const result=await store.mutate(s=>{expireRequests(s,clock);return {users:s.users.map(u=>u.role==='sitter'?publicSitter(u):{id:u.id,role:u.role,name:u.name}),requests:s.requests.filter(r=>r.guardianId===actor||r.sitterId===actor),bookings:s.bookings.filter(b=>b.guardianId===actor||b.sitterId===actor)};}); return send(res,200,result); }
+      if(req.method==='GET'&&url.pathname==='/api/me') {const user=store.state.users.find(u=>u.id===actor);return send(res,200,{user:ownUser(user,isVerified(user))});}
+      const childPath=url.pathname.match(/^\/api\/me\/children\/([^/]+)$/);
+      const editProfile=req.method==='PATCH'&&url.pathname==='/api/me';
+      const addChild=req.method==='POST'&&url.pathname==='/api/me/children';
+      const editChild=req.method==='PATCH'&&childPath;
+      const editSettings=req.method==='PATCH'&&url.pathname==='/api/me/sitter-settings';
+      if(editProfile||addChild||editChild||editSettings){
+        const input=await body(req);
+        const result=await store.mutate(s=>{
+          const user=s.users.find(u=>u.id===actor);
+          if((addChild||editChild)&&user.role!=='guardian')err(403,'GUARDIAN_ONLY','保護者だけがお子さまを編集できます。');
+          if(editSettings&&user.role!=='sitter')err(403,'SITTER_ONLY','シッターだけが料金・空き時間を編集できます。');
+          const child=editChild?user.children?.find(c=>c.id===childPath[1]):null;
+          if(editChild&&!child)err(404,'CHILD_NOT_FOUND','本人のお子さまが見つかりません。');
+          const fields=editProfile?['name','region']:editSettings?['rate','availabilitySchedule']:['name','birthDate'];
+          allowFields(input,[...fields,'expectedRevision','operationId']);
+          const fingerprint=JSON.stringify({action:editProfile?'profile':editSettings?'settings':addChild?'add-child':'edit-child',childId:editChild?childPath[1]:null,input});
+          const prior=operation(s,actor,input.operationId,fingerprint,null);if(prior)return prior;
+          revisionCheck(user,input);
+          if(editProfile){
+            if(!['東京','千葉','茨城'].includes(input.region))err(422,'INVALID_REGION','東京・千葉・茨城から選択してください。');
+            user.name=syntheticName(input.name);user.region=input.region;
+          }else if(editSettings){
+            if(!Number.isInteger(input.rate)||input.rate<1||input.rate>MAX_RATE)err(422,'INVALID_RATE','時給は1〜10,000円の整数で指定してください。');
+            const schedule=scheduleFields(input.availabilitySchedule);user.rate=input.rate;user.availabilitySchedule=schedule;
+          }else{
+            const fields=childFields(input,clock);
+            if(addChild){if((user.children||[]).length>=12)err(422,'CHILD_LIMIT','保存できる合成児は12人までです。');(user.children||=[]).push({id:'child-'+randomUUID(),...fields});}
+            else {child.name=fields.name;child.birthDate=fields.birthDate;}
+          }
+          user.profileRevision=(user.profileRevision||0)+1;
+          const result={user:clone(ownUser(user,isVerified(user)))};s.operations[actor+':'+input.operationId].result=result;return result;
+        });return send(res,addChild?201:200,result);
+      }
       if(req.method==='GET'&&url.pathname==='/api/search') return send(res,200,{sitters:listSitters(store.state,Object.fromEntries(url.searchParams),clock)});
       if(req.method==='GET'&&url.pathname==='/api/messages') { const sitterId=url.searchParams.get('sitterId'), p=participant(store.state,actor,sitterId); const guardianId=p.user.role==='sitter'?url.searchParams.get('guardianId'):actor; if(!guardianId||!store.state.users.some(u=>u.id===guardianId&&u.role==='guardian')) err(422,'GUARDIAN_REQUIRED','会話する保護者を選択してください。'); return send(res,200,{messages:store.state.messages.filter(m=>m.sitterId===sitterId&&m.guardianId===guardianId)}); }
-      if(req.method==='POST'&&url.pathname==='/api/register') { const input=await body(req); const r=await store.mutate(s=>{if(!['guardian','sitter'].includes(input.role)||!input.name)err(422,'INVALID_REGISTRATION','役割と表示名を入力してください。'); const id='local-'+randomUUID(); const u=input.role==='guardian'?{id,role:'guardian',name:input.name+'（合成）',region:'東京',children:[]}:{id,role:'sitter',name:input.name+'（合成）',region:'東京',rate:1800,transport:500,qualifications:[],ageMonths:[12,120],capacity:1,multiScenario:false,review:{qualification:false,training:false,notification:false,initialInsurance:false},available:false};s.users.push(u);return u;}); return send(res,201,{user:r,notice:input.role==='sitter'?'新規シッターは合成確認待ちのため検索・受付できません。':'ローカル合成登録を完了しました。'}); }
+      if(req.method==='POST'&&url.pathname==='/api/register') { const input=await body(req); const r=await store.mutate(s=>{if(!['guardian','sitter'].includes(input.role)||!input.name)err(422,'INVALID_REGISTRATION','役割と表示名を入力してください。'); const name=syntheticName(input.name); const id='local-'+randomUUID(); const u=input.role==='guardian'?{id,role:'guardian',name,region:'東京',children:[]}:{id,role:'sitter',name,region:'東京',rate:1800,transport:500,qualifications:[],ageMonths:[12,120],capacity:1,multiScenario:false,review:{qualification:false,training:false,notification:false,initialInsurance:false},available:false};s.users.push(u);return u;}); return send(res,201,{user:ownUser(r,isVerified(r)),notice:input.role==='sitter'?'新規シッターは合成確認待ちのため検索・受付できません。':'ローカル合成登録を完了しました。'}); }
       if(req.method==='POST'&&url.pathname==='/api/messages') { const input=await body(req); const result=await store.mutate(s=>{const {user,sitter}=participant(s,actor,input.sitterId); if(!input.body?.trim())err(422,'EMPTY_MESSAGE','相談内容を入力してください。'); const fingerprint=JSON.stringify({to:input.sitterId,guardianId:input.guardianId||actor,body:input.body}); const prior=operation(s,actor,input.operationId,fingerprint,null);if(prior)return prior; const guardianId=user.role==='guardian'?actor:input.guardianId; if(user.role==='sitter'&&!guardianId)err(422,'GUARDIAN_REQUIRED','返信先を指定してください。'); const m={id:randomUUID(),sitterId:sitter.id,guardianId,authorId:actor,body:input.body.trim(),createdAt:clock().toISOString()};s.messages.push(m);s.operations[actor+':'+input.operationId].result=m;return m;});return send(res,201,{message:result}); }
       if(req.method==='POST'&&url.pathname==='/api/quotes') { const input=await body(req); const sitter=store.state.users.find(x=>x.id===input.sitterId); if(!sitter)err(404,'SITTER_NOT_FOUND','シッターが見つかりません。'); return send(res,200,quote(input,sitter,clock)); }
       if(req.method==='POST'&&url.pathname==='/api/requests') { const input=await body(req); const result=await store.mutate(s=>{const guardian=s.users.find(x=>x.id===actor&&x.role==='guardian');if(!guardian)err(403,'GUARDIAN_ONLY','保護者だけが正式依頼できます。');const sitter=s.users.find(x=>x.id===input.sitterId);if(!sitter)err(404,'SITTER_NOT_FOUND','シッターが見つかりません。');const fingerprint=JSON.stringify({...input,guardianId:actor});
         const prior=operation(s,actor,input.operationId,fingerprint,null);if(prior)return prior;
+        if(!Number.isInteger(input.expectedRate))err(422,'EXPECTED_RATE_REQUIRED','表示済み概算の時給を確認してください。');
+        if(input.expectedRate!==sitter.rate)err(409,'PRICE_CHANGED','時給が変更されました。最新の概算と同意を確認してください。');
         if(input.acceptCancellation!==true)err(422,'CANCELLATION_CONSENT_REQUIRED','キャンセル条件への同意が必要です。');
         if(input.transportAmount===undefined)err(422,'TRANSPORT_REQUIRED','相談した交通費提案額を入力してください。');
         const q=quote(input,sitter,clock);

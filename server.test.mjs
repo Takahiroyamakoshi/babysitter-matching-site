@@ -38,7 +38,7 @@ test('request creation is idempotent and only its sitter can approve',async()=>{
   const dir=await mkdtemp(path.join(tmpdir(),'sitter-api-')), file=path.join(dir,'state.json');
   const {server,store}=await start({dataFile:file,port:0}); const port=server.address().port;
   const call=async(p,actor,body)=>{const r=await fetch('http://127.0.0.1:'+port+p,{method:'POST',headers:{'content-type':'application/json','x-demo-actor':actor},body:JSON.stringify(body)});return [r,await r.json()]};
-  const input={...good(),sitterId:'sitter-aya',acceptCancellation:true,transportAmount:500,acceptTransport:true,operationId:'request-1'};
+  const input={...good(),sitterId:'sitter-aya',expectedRate:2200,acceptCancellation:true,transportAmount:500,acceptTransport:true,operationId:'request-1'};
   const [one,a]=await call('/api/requests','guardian-demo',input); assert.equal(one.status,201);
   const [two,b]=await call('/api/requests','guardian-demo',input); assert.equal(two.status,201); assert.equal(a.request.id,b.request.id);
   const [forbidden]=await call('/api/requests/'+a.request.id+'/approve','sitter-yui',{operationId:'wrong'}); assert.equal(forbidden.status,403);
@@ -57,7 +57,7 @@ test('approval rechecks persisted medical flags and refuses a tampered pending r
   const dir=await mkdtemp(path.join(tmpdir(),'sitter-medical-')), file=path.join(dir,'state.json');
   const {server,store}=await start({dataFile:file,port:0}), port=server.address().port;
   const call=async(p,actor,body)=>{const r=await fetch('http://127.0.0.1:'+port+p,{method:'POST',headers:{'content-type':'application/json','x-demo-actor':actor},body:JSON.stringify(body)});return [r,await r.json()]};
-  const [created,data]=await call('/api/requests','guardian-demo',{...good(),sitterId:'sitter-aya',acceptCancellation:true,transportAmount:500,acceptTransport:true,operationId:'medical-request'});
+  const [created,data]=await call('/api/requests','guardian-demo',{...good(),sitterId:'sitter-aya',expectedRate:2200,acceptCancellation:true,transportAmount:500,acceptTransport:true,operationId:'medical-request'});
   assert.equal(created.status,201); store.state.requests[0].medical=true;
   const [approval]=await call('/api/requests/'+data.request.id+'/approve','sitter-aya',{operationId:'medical-approve',acknowledgeTransport:true});
   assert.equal(approval.status,422); assert.equal(store.state.requests[0].status,'pending');
@@ -68,12 +68,12 @@ test('travel buffer allows exactly 30 minutes and refuses a closer confirmed-slo
   const dir=await mkdtemp(path.join(tmpdir(),'sitter-buffer-')), file=path.join(dir,'state.json');
   const {server,store}=await start({dataFile:file,port:0}), port=server.address().port;
   const call=async(p,actor,body)=>{const r=await fetch('http://127.0.0.1:'+port+p,{method:'POST',headers:{'content-type':'application/json','x-demo-actor':actor},body:JSON.stringify(body)});return [r,await r.json()]};
-  const make=async(start,end,key)=>{const [r,d]=await call('/api/requests','guardian-demo',{...good({start,end}),sitterId:'sitter-aya',acceptCancellation:true,transportAmount:500,acceptTransport:true,operationId:key});assert.equal(r.status,201);return d.request;};
+  const make=async(start,end,key)=>{const [r,d]=await call('/api/requests','guardian-demo',{...good({start,end}),sitterId:'sitter-aya',expectedRate:2200,acceptCancellation:true,transportAmount:500,acceptTransport:true,operationId:key});assert.equal(r.status,201);return d.request;};
   const first=await make('2026-10-20T10:00:00+09:00','2026-10-20T13:00:00+09:00','b1');
   assert.equal((await call('/api/requests/'+first.id+'/approve','sitter-aya',{operationId:'a1',acknowledgeTransport:true}))[0].status,200);
   const exact=await make('2026-10-20T13:30:00+09:00','2026-10-20T16:30:00+09:00','b2');
   assert.equal((await call('/api/requests/'+exact.id+'/approve','sitter-aya',{operationId:'a2',acknowledgeTransport:true}))[0].status,200);
-  const [near]=await call('/api/requests','guardian-demo',{...good({start:'2026-10-20T16:45:00+09:00',end:'2026-10-20T19:45:00+09:00'}),sitterId:'sitter-aya',acceptCancellation:true,transportAmount:500,acceptTransport:true,operationId:'b3'});
+  const [near]=await call('/api/requests','guardian-demo',{...good({start:'2026-10-20T16:45:00+09:00',end:'2026-10-20T19:45:00+09:00'}),sitterId:'sitter-aya',expectedRate:2200,acceptCancellation:true,transportAmount:500,acceptTransport:true,operationId:'b3'});
   assert.equal(near.status,409);
   await new Promise(resolve=>server.close(resolve));await store.close();
 });
@@ -132,7 +132,7 @@ async function testApi(t) {
 
 test('new formal requests and approvals require both transport confirmations and preserve proposed 500',async t=>{
   const {store,call}=await testApi(t);
-  const input={...good(),sitterId:'sitter-aya',acceptCancellation:true};
+  const input={...good(),sitterId:'sitter-aya',expectedRate:2200,acceptCancellation:true};
   for(const [key,fields] of Object.entries({missing:{},unconfirmed:{transportAmount:500},negative:{transportAmount:-1,acceptTransport:true},string:{transportAmount:'500',acceptTransport:true}})) {
     const result=await call('/api/requests','guardian-demo',{...input,...fields,operationId:key});assert.equal(result.status,422);
   }

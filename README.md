@@ -16,7 +16,7 @@ The server stores prices, children, dates, transport proposal, and confirmation 
 
 Two synthetic guardians and two reviewed synthetic sitters are included. Listing and requests require server-held qualification, training, notification, and initial-insurance checks. Newly registered sitters stay pending and cannot self-promote to listing or requests.
 
-Reviewed sitters are available daily from 08:00 to 22:00 JST, within one day. The server rejects out-of-range slots, confirmed bookings, and the 30-minute travel buffer in search, request, and approval. Only Aya's fixed synthetic scenario accepts two or three children. The service age limit remains the end of the child's third elementary-school year, in addition to each sitter's age range.
+Reviewed fixtures initially accept daily from 08:00 to 22:00 JST. Sitters can edit their own rate (1–10,000 integer yen), weekly seven-day schedule and date exceptions; a date exception overrides the weekly entry. Each day has one interval or is closed, in 15-minute steps, ending at 24:00 at most. Other overnight intervals are unavailable. The server rejects out-of-range slots, confirmed bookings, and the 30-minute travel buffer in search, request, and approval. Only Aya's fixed synthetic scenario accepts two or three children. The service age limit remains the end of the child's third elementary-school year, in addition to each sitter's age range.
 
 The dependency-free Node ESM server (`server.mjs`) owns rules and price calculation. `src/quote-state.mjs` supplies the UI's estimate identity, response guard, and consent gates, with independent pure tests.
 
@@ -33,7 +33,17 @@ Open http://127.0.0.1:8787 and stop with Ctrl+C. Data persists at `data/local-de
 ## Validate
 
 ~~~powershell
-cmd.exe /d /c 'pushd \\wsl.localhost\Ubuntu\home\takahiro\project\babysitter-matching && C:\Users\PC_User\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe node_modules/typescript/bin/tsc --noEmit && C:\Users\PC_User\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe node_modules/vite/bin/vite.js build && C:\Users\PC_User\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe --test server.test.mjs quote-state.test.mjs'
+cmd.exe /d /c 'pushd \\wsl.localhost\Ubuntu\home\takahiro\project\babysitter-matching && C:\Users\PC_User\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe node_modules/typescript/bin/tsc --noEmit && C:\Users\PC_User\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe node_modules/vite/bin/vite.js build && C:\Users\PC_User\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe --test server.test.mjs quote-state.test.mjs next-core.test.mjs'
 ~~~
 
 Tests cover server-derived prices/night decomposition, eligibility, disabled services, duration, multiple-child conditions, store locking/atomic failure, participant checks, idempotency, travel buffers, search filters and validation, pending/proposed transport, both confirmation gates, legacy schema-1 snapshots/replays after restart, and stale-response/consent invalidation. Browser usability and responsive layout are a separate verification step.
+
+## Own profiles and availability
+
+Navigation follows the selected role. Guardians edit their own synthetic name/region and up to twelve saved children, then explicitly select a child in the common search/consultation/estimate conditions (or keep manual birth-date entry). Request conditions remain limited to three children; duplicate saved-child selection is refused. Updating a saved child's profile does not silently change an open request condition or a sent request.
+
+Sitters edit their own rate and weekly/date availability without changing review permissions. New sitters remain pending even after settings are saved. Current availability is checked at search, request creation and approval; closing a day does not cancel confirmed bookings. Pending and confirmed prices/child conditions stay as sent. A new formal request sends the displayed estimate's rate as expectedRate; a changed rate returns 409 PRICE_CHANGED, keeps the conversation/input and requires a new estimate and consent.
+
+GET /api/me returns {user} for the actor, including profileRevision (initially 0), guardian children or sitter rate/availabilitySchedule/listingReady. Bootstrap exposes switcher/public data without any guardian children. PATCH /api/me, POST /api/me/children, PATCH /api/me/children/:id and PATCH /api/me/sitter-settings all return {user}. Updates allow only documented fields and require expectedRevision plus operationId; stale revisions return 409 PROFILE_CONFLICT. Same-content retries reuse their operation ID; changing a draft starts a new operation. Saving is atomic, including the revision and original retry response. Profile editors keep drafts while bootstrap polling refreshes reservations; a conflict offers an explicit latest-revision read while retaining input.
+
+The schema stays at 1. Missing profileRevision means 0, and missing availabilitySchedule falls back to the old availability (or 00:00–24:00). Reading defaults does not rewrite old users. Existing successful request/approval operations replay before new required-price checks. The small profile-domain.mjs module owns profile validation and availability; src/profile.tsx owns the separated editor and API components. No new dependencies are required.

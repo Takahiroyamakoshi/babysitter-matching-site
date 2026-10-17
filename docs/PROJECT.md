@@ -10,3 +10,6 @@
 - production_trigger_on_merge: リモート未設定。マージ・公開は未実施。
 - human_plan_check: 登録・検索・チャット・予約から開始する方針を提示し、ユーザーが実行依頼済み。実装範囲が広がる場合は確認する。
 - user_decisions: 運営AI詳細は後続。病児・投薬補助は受付無効。最大3人は条件付き。
+
+## Continued local implementation authorization (2026-10-17)
+User requested continued implementation after the accepted quarter-hour correction. Ordinary design decisions remain delegated. Next bounded increment is role navigation, own synthetic profile/children management and sitter rate/availability management, integrated with existing search/request/approval. Planning/design and independent audit precede source changes. Existing production/external/destructive boundaries remain. See docs/tasks/NEXT-CORE.md and docs/design/NEXT-CORE.md. No additional confirmation is required for this authorized ordinary local increment.
