@@ -4,8 +4,8 @@
 - requirement_ids: REQUIREMENTS v0.45 S01〜S03、§6/7/12/21/26/28/29/30、G10/G16/G17bのL部分、BUSINESS-CONTRACTS BC01〜04/06/07/08。全G16/G17bや公開準備の完了ではない。
 - dependencies: G00独立監査済全体計画、G01業務契約の当該範囲の独立設計/計画監査。既存G11/G12の合成通常単発snapshotと本人/児/役割資産を継承。
 - assigned_agent: 親から実装担当へ。独立検証・成果物レビューは別担当、実画面は親のCUA。
-- state: implementation_in_progress
-- state_version: 1
+- state: verification_in_progress
+- state_version: 2
 - updated_at_utc: 2026-10-17
 - revision_record: v0.1 planner提案。状態遷移・実装開始・独立合格は親が別記録する。
 - cycle: initial
@@ -104,3 +104,6 @@ Lでは通知のWeb保存と合成メールadapter受付を保存する。メー
 - started_at_utc: 2026-10-17T09:39:00Z
 - external_operations: none; local commits allowed, no push/PR/merge
 - next_action: implement LL01-09, capture clean revision, then independent verification and artifact review
+
+- S01 implementation received: a5aab6a9d3ea9e7f1150acaaf5122b4c445c9340; evidence/local-lifecycle/S01/revision.json. 42/42 automated tests, typecheck/build PASS. Source frozen. Independent API and parent CUA pending; no completion verdict.
+- verification_started_at_utc: 2026-10-17T09:51:00Z (approximate record; exact capture time in revision.json)
