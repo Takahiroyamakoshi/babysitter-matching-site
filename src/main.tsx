@@ -1,49 +1,199 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { estimateKey, invalidateEstimate, canSubmitEstimate, QuoteGuard, transportInput } from './quote-state.mjs';
+import type { Estimate } from './quote-state.mjs';
 import './style.css';
 
-type User={id:string;role:'guardian'|'sitter';name:string;children?:Child[];rate?:number;qualifications?:string[];capacity?:number};
-type Child={id?:string;name:string;birthDate:string;relation?:string;care?:string};
-type Sitter={id:string;name:string;region:string;rate:number;transport:number;qualifications:string[];ageMonths:number[];capacity:number};
-type Quote={rate:number;children:number;hours:number;nightSurcharge:number;service:number;fee:number;takeHome:number;transport:number;guardianTotal:number};
-type Request={id:string;guardianId:string;sitterId:string;status:string;start:string;end:string;expiresAt:string;quote:Quote};
-
+type Child={name:string;birthDate:string;relation:string;care:string};
+type User={id:string;role:'guardian'|'sitter';name:string;children?:Child[]};
+type Sitter=User & {region:string;rate:number;qualifications:string[];ageMonths:number[];capacity:number};
+type Quote={base:number;nightSurcharge:number;service:number;fee:number;takeHome:number;transport:number|null;guardianTotal:number|null};
+type CareRequest={id:string;guardianId:string;sitterId:string;status:string;start:string;end:string;expiresAt:string;children:Child[];quote:Quote;transportProposal?:{amount:number;guardianAccepted:boolean;sitterAcknowledged?:boolean}};
+type Message={id:string;body:string;authorId:string;createdAt:string};
+type Conditions={start:string;end:string;birthDates:string[]};
+type Filters={region:string;qualification:string;maxRate:string};
+type Tab='search'|'consult'|'request'|'requests'|'account';
 const id=()=>crypto.randomUUID();
-const asIso=(v:string)=>v? v+':00+09:00':'';
-const dateValue=(days:number,hour:number)=>{const d=new Date(Date.now()+days*86400000);return d.toISOString().slice(0,10)+'T'+String(hour).padStart(2,'0')+':00'};
-async function api(path:string, actor:string, opts:RequestInit={}) { const r=await fetch(path,{...opts,headers:{'content-type':'application/json','x-demo-actor':actor,...opts.headers}}); const data=await r.json();if(!r.ok)throw new Error(data.message||'通信に失敗しました');return data; }
-function yen(v:number){return new Intl.NumberFormat('ja-JP',{style:'currency',currency:'JPY',maximumFractionDigits:0}).format(v)}
-function App(){
- const [users,setUsers]=useState<User[]>([]),[actor,setActor]=useState('guardian-demo'),[tab,setTab]=useState('search'),[sitters,setSitters]=useState<Sitter[]>([]),[selected,setSelected]=useState<Sitter|null>(null),[requests,setRequests]=useState<Request[]>([]),[message,setMessage]=useState('こんにちは。合成デモの通常保育について相談したいです。'),[messages,setMessages]=useState<any[]>([]),[alert,setAlert]=useState(''),[error,setError]=useState(''),[form,setForm]=useState({start:dateValue(7,10),end:dateValue(7,13),birthDate:'2021-05-10',count:'1',serviceType:'normal',medical:false,medication:false,acceptCancellation:false,region:'東京',qualification:'',maxRate:'10000'}),[conversationGuardian,setConversationGuardian]=useState('guardian-demo'),[messageOp,setMessageOp]=useState(id()),[requestOp,setRequestOp]=useState(id()),[requestOps,setRequestOps]=useState<Record<string,string>>({}),[sending,setSending]=useState(false);
- const me=users.find(u=>u.id===actor); const conversationRequestRef=useRef('');
- const children=useMemo(()=>Array.from({length:Number(form.count)},(_,i)=>({name:'対象児'+(i+1)+'（合成）',birthDate:form.birthDate,relation:'保護者の子',care:'通常保育'})),[form.count,form.birthDate]);
- const payload=()=>({sitterId:selected?.id,start:asIso(form.start),end:asIso(form.end),children,serviceType:form.serviceType,medical:form.medical,medication:form.medication});
- const refresh=async()=>{const d=await api('/api/bootstrap',actor);setUsers(d.users);setRequests(d.requests);};
- const updateForm=(next:Partial<typeof form>)=>{setForm({...form,...next,acceptCancellation:false});setQuote(null);setQuoteKey('');setRequestOp(id());};
- useEffect(()=>{refresh().catch(e=>setError(e.message));const timer=window.setInterval(()=>refresh().catch(()=>{}),15000);return()=>window.clearInterval(timer);},[actor]);
- const search=async()=>{setError('');try{const q=new URLSearchParams({region:form.region,start:asIso(form.start),end:asIso(form.end),children:JSON.stringify(children),serviceType:form.serviceType,maxRate:form.maxRate});if(form.qualification)q.set('qualification',form.qualification);const d=await api('/api/search?'+q,actor);setSitters(d.sitters);setAlert(d.sitters.length?'条件に合う合成シッターを表示しました。':'この条件に合うシッターはいません。');}catch(e:any){setError(e.message)}};
- const activeGuardian=me?.role==='sitter'?conversationGuardian:actor;
- const loadMessages=async(s:Sitter, guardian=activeGuardian)=>{const requestKey=actor+'|'+s.id+'|'+guardian;conversationRequestRef.current=requestKey;setMessages([]);const suffix=me?.role==='sitter'?'&guardianId='+guardian:'';const d=await api('/api/messages?sitterId='+s.id+suffix,actor);if(conversationRequestRef.current===requestKey)setMessages(d.messages);};
- const openSitter=(s:Sitter)=>{const guardian=me?.role==='guardian'?actor:(users.find(u=>u.role==='guardian')?.id||'guardian-demo');setSelected(s);setQuote(null);setQuoteKey('');setForm({...form,acceptCancellation:false});setConversationGuardian(guardian);setMessages([]);setTab('consult');setError('');};
- useEffect(()=>{if(selected)loadMessages(selected).catch(e=>setError(e.message));},[actor,selected?.id,conversationGuardian]);
- const sendMessage=async()=>{if(!selected)return;setError('');setSending(true);try{const d=await api('/api/messages',actor,{method:'POST',body:JSON.stringify({sitterId:selected.id,guardianId:me?.role==='sitter'?conversationGuardian:undefined,body:message,operationId:messageOp})});setMessages(x=>[...x,d.message]);setMessage('');setMessageOp(id());setAlert('相談を送信しました。チャットだけでは予約は成立しません。')}catch(e:any){setError(e.message)}finally{setSending(false)}};
- const getQuote=async()=>{if(!selected)return;setError('');try{const d=await api('/api/quotes',actor,{method:'POST',body:JSON.stringify(payload())});setQuote(d.quote);setQuoteKey(JSON.stringify(payload()));setTab('request')}catch(e:any){setError(e.message)}};
- const [quote,setQuote]=useState<Quote|null>(null);const [quoteKey,setQuoteKey]=useState('');
- const submitRequest=async()=>{if(!selected)return;if(quoteKey!==JSON.stringify(payload())){setError('条件が変わりました。見積りを作り直してください。');return;}setError('');setSending(true);try{const d=await api('/api/requests',actor,{method:'POST',body:JSON.stringify({...payload(),acceptCancellation:form.acceptCancellation,operationId:requestOp})});setAlert('正式依頼を送信しました。期限までにシッターが承認すると成立します。');setRequests(x=>[...x,d.request]);setRequestOp(id());setTab('requests')}catch(e:any){setError(e.message)}finally{setSending(false)}};
- const requestOperation=(requestId:string)=>{const existing=requestOps[requestId];if(existing)return existing;const next=id();setRequestOps({...requestOps,[requestId]:next});return next;};
- const approve=async(r:Request)=>{setError('');setSending(true);try{await api('/api/requests/'+r.id+'/approve',actor,{method:'POST',body:JSON.stringify({operationId:requestOperation(r.id)})});setAlert('承認しました。成立済み予約と価格スナップショットを保存しました。');await refresh()}catch(e:any){setError(e.message)}finally{setSending(false)}};
- const decline=async(r:Request)=>{setError('');setSending(true);try{await api('/api/requests/'+r.id+'/decline',actor,{method:'POST',body:JSON.stringify({operationId:requestOperation(r.id)})});setAlert('正式依頼を辞退しました。');await refresh()}catch(e:any){setError(e.message)}finally{setSending(false)}};
- const register=async(role:'guardian'|'sitter')=>{const name=prompt('合成用の表示名を入力してください');if(!name)return;try{const d=await api('/api/register',actor,{method:'POST',body:JSON.stringify({role,name})});setAlert(d.notice);await refresh();setActor(d.user.id)}catch(e:any){setError(e.message)}};
- return <main className="shell"><div className="notice">ローカル合成デモです。実在の個人情報・連絡先・身分証・医療情報・決済情報を入力しないでください。</div>
- <header className="head"><div><h1>おうち保育</h1><p>選んで、相談して、条件を確定する。</p></div><div className="actor"><label htmlFor="actor">デモ利用者を切替（認証ではありません）</label><select id="actor" value={actor} onChange={e=>{conversationRequestRef.current='';setMessages([]);setSelected(null);setQuote(null);setQuoteKey('');setForm({...form,acceptCancellation:false});setActor(e.target.value)}}>{users.map(u=><option key={u.id} value={u.id}>{u.name} / {u.role==='guardian'?'保護者':'シッター'}</option>)}</select></div></header>
- <nav className="tabs" aria-label="画面"><button className={tab==='search'?'active':''} onClick={()=>setTab('search')}>検索</button><button className={tab==='consult'?'active':''} onClick={()=>setTab('consult')} disabled={!selected}>相談</button><button className={tab==='request'?'active':''} onClick={()=>setTab('request')} disabled={!selected}>見積り・依頼</button><button className={tab==='requests'?'active':''} onClick={()=>setTab('requests')}>予約一覧</button><button className={tab==='account'?'active':''} onClick={()=>setTab('account')}>登録</button></nav>
- {error&&<p className="error" role="alert">{error}</p>}{alert&&<p className="success" role="status">{alert}</p>}
- {tab==='search'&&<section className="split"><div className="card"><h2>通常保育を探す</h2><p className="small">病児・病後児・投薬補助は、検索・見積り・依頼のすべてで受付しません。</p><div className="form"><div className="row"><label>開始<input type="datetime-local" value={form.start} onChange={e=>updateForm({start:e.target.value})}/></label><label>終了<input type="datetime-local" value={form.end} onChange={e=>updateForm({end:e.target.value})}/></label></div><div className="row"><label>対象児の生年月日<input type="date" value={form.birthDate} onChange={e=>updateForm({birthDate:e.target.value})}/></label><label>人数<select value={form.count} onChange={e=>updateForm({count:e.target.value})}><option value="1">1人</option><option value="2">2人</option><option value="3">3人（条件付き）</option><option value="4">4人（受付不可）</option></select></label></div><div className="row"><label>地域<select value={form.region} onChange={e=>updateForm({region:e.target.value})}><option value="東京">東京</option><option value="千葉">千葉</option><option value="茨城">茨城</option></select></label><label>資格<select value={form.qualification} onChange={e=>updateForm({qualification:e.target.value})}><option value="">指定なし</option><option value="保育士">保育士</option><option value="幼稚園教諭">幼稚園教諭</option><option value="看護師">看護師</option></select></label></div><label>時給上限（円）<input type="number" min="1" max="10000" value={form.maxRate} onChange={e=>updateForm({maxRate:e.target.value})}/></label><button onClick={search}>条件を確認して検索</button></div></div><div className="card"><h2>条件の目安</h2><p>通常保育は未来の15分刻み・最低3時間。対象は生後6か月から小学3年生年度末までです。</p><p>資格、必要研修、届出、初回保険の合成確認がそろったシッターだけを掲載します。</p></div></section>}
- {tab==='search'&&<section className="grid" aria-live="polite">{sitters.map(s=><article className="card" key={s.id}><h3>{s.name}</h3><span className="price">{yen(s.rate)}/時・人</span><p>{s.region} / 対応 {s.ageMonths[0]}〜{s.ageMonths[1]}か月 / 最大{s.capacity}人</p>{s.qualifications.map(q=><span className="tag" key={q}>{q}</span>)}<p><button onClick={()=>openSitter(s)}>相談・条件を確認</button></p></article>)}</section>}
- {tab==='consult'&&selected&&<section className="split"><div className="card"><h2>{selected.name} さんと相談</h2><p className="small">合成のテキスト相談です。返信だけでは予約は成立しません。</p>{me?.role==='sitter'&&<label>会話する保護者<select value={conversationGuardian} onChange={e=>{setMessages([]);setConversationGuardian(e.target.value)}}>{users.filter(u=>u.role==='guardian').map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select></label>}<div className="chat">{messages.map(m=><div className={'bubble '+(m.authorId===actor?'mine':'')} key={m.id}>{m.body}<div className="small">{m.authorId===actor?'あなた':'相手'} / {new Date(m.createdAt).toLocaleString('ja-JP')}</div></div>)}</div><div className="form"><label>相談内容<textarea value={message} onChange={e=>{setMessage(e.target.value);setMessageOp(id())}} /></label><button onClick={sendMessage} disabled={!message.trim()||sending}>相談を送信</button></div></div><div className="card"><h2>次の手順</h2><p>日時・対象児・料金を確認し、正式依頼へ進みます。</p><button onClick={getQuote}>見積りを表示</button></div></section>}
- {tab==='request'&&selected&&<section className="split"><div className="card"><h2>正式依頼</h2>{quote?<div className="quote"><dl><dt>保育料</dt><dd>{yen(quote.service)}</dd><dt>夜間加算</dt><dd>{yen(quote.nightSurcharge)}</dd><dt>運営手数料</dt><dd>{yen(quote.fee)}</dd><dt>交通費（手数料対象外）</dt><dd>{yen(quote.transport)}</dd><dt>保護者のデモ見積り総額</dt><dd>{yen(quote.guardianTotal)}</dd><dt>シッター手取り目安</dt><dd>{yen(quote.takeHome)}</dd></dl></div>:<p>検索条件から見積りを作成してください。</p>}<p className="small">単価・割増・交通費・規則版を承認時まで固定して保存します。取消は日本時間の利用開始日基準で前々日以前0%、前日50%、当日100%の保育料案です。発生済みで返金不能な実費だけを交通費対象とし、取消料も運営15%・シッター85%案です。実際の取消・精算は未実装です。</p><label><input type="checkbox" checked={form.acceptCancellation} onChange={e=>setForm({...form,acceptCancellation:e.target.checked})}/> ローカルデモの取消条件（成立後の取消・精算は未実装）に同意する</label><p><button onClick={submitRequest} disabled={!quote||!form.acceptCancellation||me?.role!=='guardian'||sending}>正式依頼を送信</button></p></div><div className="card"><h2>依頼内容</h2><p>{form.start.replace('T',' ')} から {form.end.replace('T',' ')}</p><p>{children.length}人 / 通常保育 / {selected.name}</p><button className="secondary" onClick={()=>setTab('search')}>条件を戻して変更</button></div></section>}
- {tab==='requests'&&<section className="card"><h2>予約・正式依頼</h2><p className="small">承認待ちは枠を占有しません。承認時に期限・適合・成立予約・移動30分を再確認します。</p><div className="list">{requests.filter(r=>r.guardianId===actor||r.sitterId===actor).map(r=><div className={'request '+r.status} key={r.id}><strong>{r.status==='pending'?'承認待ち':r.status==='confirmed'?'成立':r.status==='declined'?'辞退':'失効'}</strong><br/>{new Date(r.start).toLocaleString('ja-JP')}〜{new Date(r.end).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}<br/><span className="small">見積り {yen(r.quote.guardianTotal)} / 期限 {new Date(r.expiresAt).toLocaleString('ja-JP')}</span>{actor===r.sitterId&&r.status==='pending'&&<p><button onClick={()=>approve(r)} disabled={sending}>依頼を承認して成立</button> <button className="secondary" onClick={()=>decline(r)} disabled={sending}>辞退</button></p>}</div>)}{!requests.filter(r=>r.guardianId===actor||r.sitterId===actor).length&&<p>まだありません。</p>}</div></section>}
- {tab==='account'&&<section className="grid"><div className="card"><h2>保護者の合成登録</h2><p>実情報なしで、表示名だけを登録します。</p><button onClick={()=>register('guardian')}>合成保護者を登録</button></div><div className="card"><h2>シッターの合成登録</h2><p>新規シッターは資格・研修・届出・初回保険の合成確認待ちです。自己申告で掲載や受付はできません。</p><button onClick={()=>register('sitter')}>合成シッターを登録</button></div></section>}
- <footer className="footer">local-demo-0.1 ・ 127.0.0.1だけで動作 ・ 本人確認・メール・決済・病児対応なし</footer></main>;
+const asIso=(v:string)=>v?v+':00+09:00':'';
+const dateValue=(days:number,hour:number)=>new Date(Date.now()+days*86400000).toISOString().slice(0,10)+'T'+String(hour).padStart(2,'0')+':00';
+const yen=(v:number)=>new Intl.NumberFormat('ja-JP',{style:'currency',currency:'JPY',maximumFractionDigits:0}).format(v);
+const ageLabel=(months:number)=>months<12?months+'か月':Math.floor(months/12)+'歳'+(months%12?months%12+'か月':'');
+const displayTime=(value:string)=>new Date(value).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+async function api(path:string,actor:string,opts:RequestInit={}) {
+  let response:Response;
+  try {response=await fetch(path,{...opts,headers:{'content-type':'application/json','x-demo-actor':actor,...opts.headers}})}
+  catch {throw new Error('通信に失敗しました。入力は保持しています。接続を確認して再試行してください。')}
+  const data=await response.json();
+  if(!response.ok)throw new Error(data.message||'処理できませんでした。再試行してください。');
+  return data;
+}
+function conditionError(value:Conditions) {
+  if(!value.start||!value.end)return '開始・終了日時を入力してください。';
+  const start=new Date(asIso(value.start)),end=new Date(asIso(value.end));
+  if(+start<=Date.now()||+end<=+start)return '未来の開始日時と、それより後の終了日時を指定してください。';
+  if(+end-+start<3*3600000)return '通常保育は最低3時間です。終了日時を延ばしてください。';
+  if(start.getUTCMinutes()%15||end.getUTCMinutes()%15)return '開始・終了は15分刻みで指定してください。';
+  if(value.birthDates.some(d=>!d))return 'お子さま全員の生年月日を入力してください。';
+  return '';
+}
+function RequestConditions({value,onChange,prefix}:{value:Conditions;onChange:(value:Conditions)=>void;prefix:string}) {
+  const reason=conditionError(value),invalidTime=!!reason&&!reason.includes('生年月日');
+  return <fieldset className="card form"><legend>お子さま・依頼日時</legend>
+    <p className="small">通常保育は最低3時間、15分刻みです。日時は日本時間で入力してください。</p>
+    <div className="row">
+      <label htmlFor={prefix+'-start'}>開始日時<input id={prefix+'-start'} type="datetime-local" step="900" value={value.start} aria-invalid={invalidTime} aria-describedby={prefix+'-help'} onChange={e=>onChange({...value,start:e.target.value})}/></label>
+      <label htmlFor={prefix+'-end'}>終了日時<input id={prefix+'-end'} type="datetime-local" step="900" value={value.end} aria-invalid={invalidTime} aria-describedby={prefix+'-help'} onChange={e=>onChange({...value,end:e.target.value})}/></label>
+    </div>
+    <label htmlFor={prefix+'-count'}>お子さまの人数<select id={prefix+'-count'} value={value.birthDates.length} onChange={e=>onChange({...value,birthDates:Array.from({length:Number(e.target.value)},(_,i)=>value.birthDates[i]||'')})}><option value="1">1人</option><option value="2">2人（条件付き）</option><option value="3">3人（条件付き）</option></select></label>
+    {value.birthDates.map((birthDate,i)=><label key={i} htmlFor={prefix+'-dob-'+i}>{i+1}人目の生年月日<input id={prefix+'-dob-'+i} type="date" value={birthDate} aria-invalid={!birthDate} aria-describedby={prefix+'-help'} onChange={e=>onChange({...value,birthDates:value.birthDates.map((d,j)=>i===j?e.target.value:d)})}/></label>)}
+    <p id={prefix+'-help'} className={reason?'field-error':'small'} aria-live="polite">{reason||'対象：生後6か月から小学3年生の年度末まで。複数人は資格・年齢等の適合確認が必要です。'}</p>
+  </fieldset>;
+}
+function SitterFilters({value,onChange}:{value:Filters;onChange:(value:Filters)=>void}) {
+  return <fieldset className="card form"><legend>シッターの希望条件</legend>
+    <p className="small">地域・資格・時給から候補を絞り込みます。</p>
+    <label htmlFor="region">対応地域<select id="region" value={value.region} onChange={e=>onChange({...value,region:e.target.value})}>{['東京','千葉','茨城'].map(r=><option key={r}>{r}</option>)}</select></label>
+    <label htmlFor="qualification">資格<select id="qualification" value={value.qualification} onChange={e=>onChange({...value,qualification:e.target.value})}><option value="">指定なし</option>{['保育士','幼稚園教諭','看護師'].map(q=><option key={q}>{q}</option>)}</select></label>
+    <label htmlFor="rate">時給上限（1人あたり・円）<input id="rate" type="number" min="1" max="10000" value={value.maxRate} onChange={e=>onChange({...value,maxRate:e.target.value})}/></label>
+    <p className="small">資格・研修・届出・初回保険の合成確認がそろったシッターのみ掲載。病児・病後児・投薬補助は受付できません。</p>
+  </fieldset>;
+}
+function PriceBreakdown({quote,sitter=false}:{quote:Quote;sitter?:boolean}) {
+  return <dl className="prices">
+    <dt>基本保育料</dt><dd>{yen(quote.base??quote.service-quote.nightSurcharge)}</dd>
+    <dt>夜間加算 <small>21時〜8時の該当時間のみ20%</small></dt><dd>{yen(quote.nightSurcharge)}</dd>
+    <dt className="subtotal">保育料合計（交通費を除く）</dt><dd className="subtotal">{yen(quote.service)}</dd>
+    <dt>交通費{quote.transport!==null?'（提案額）':''}</dt><dd>{quote.transport===null?'相談して確定':yen(quote.transport)}</dd>
+    <dt className="total">総支払額</dt><dd className="total">{quote.guardianTotal===null?'未確定':yen(quote.guardianTotal)}</dd>
+    {sitter&&<><dt>運営手数料（保育料の15%）</dt><dd>{yen(quote.fee)}</dd><dt>保育料の手取り目安（交通費別）</dt><dd>{yen(quote.takeHome)}</dd></>}
+  </dl>;
+}
+function App() {
+  const [users,setUsers]=useState<User[]>([]),[actor,setActor]=useState('guardian-demo'),[tab,setTab]=useState<Tab>('search');
+  const [conditions,setConditions]=useState<Conditions>({start:dateValue(7,10),end:dateValue(7,13),birthDates:['2021-05-10']});
+  const [filters,setFilters]=useState<Filters>({region:'東京',qualification:'',maxRate:'10000'});
+  const [sitters,setSitters]=useState<Sitter[]>([]),[selected,setSelected]=useState<Sitter|null>(null),[searched,setSearched]=useState(false);
+  const [requests,setRequests]=useState<CareRequest[]>([]),[messages,setMessages]=useState<Message[]>([]);
+  const [message,setMessage]=useState('こんにちは。合成デモの通常保育について相談したいです。'),[messageOp,setMessageOp]=useState(id());
+  const [conversationGuardian,setConversationGuardian]=useState('guardian-demo');
+  const [transport,setTransport]=useState(''),[estimate,setEstimate]=useState<Estimate<Quote>>(()=>invalidateEstimate<Quote>());
+  const [requestOp,setRequestOp]=useState(id()),[acknowledged,setAcknowledged]=useState<Record<string,boolean>>({});
+  const [sending,setSending]=useState(false),[calculating,setCalculating]=useState(false),[searching,setSearching]=useState(false);
+  const [error,setError]=useState(''),[notice,setNotice]=useState('');
+  const guard=useRef(new QuoteGuard()),errorRef=useRef<HTMLDivElement>(null),contextRef=useRef(''),conversationRef=useRef(''),actorRef=useRef(actor),searchEpoch=useRef(0);
+  const actionOps=useRef<Record<string,string>>({});
+  const me=users.find(u=>u.id===actor),isSitter=me?.role==='sitter';
+  const children:Child[]=conditions.birthDates.map((birthDate,i)=>({name:'対象児'+(i+1)+'（合成）',birthDate,relation:'保護者の子',care:'通常保育'}));
+  const payload={sitterId:selected?.id,start:asIso(conditions.start),end:asIso(conditions.end),children,serviceType:'normal',...transportInput(transport)};
+  const currentKey=estimateKey(actor,payload);
+  contextRef.current=currentKey; actorRef.current=actor;
+  const conversationKey=actor+'|'+selected?.id+'|'+(isSitter?conversationGuardian:actor);
+  conversationRef.current=conversationKey;
+  const refresh=async(target=actor)=>{
+    const data=await api('/api/bootstrap',target);
+    if(actorRef.current===target){setUsers(data.users);setRequests(data.requests)}
+  };
+  useEffect(()=>{refresh().catch(e=>setError(e.message));const timer=window.setInterval(()=>refresh().catch(()=>{}),15000);return()=>window.clearInterval(timer)},[actor]);
+  useEffect(()=>{if(error)errorRef.current?.focus()},[error]);
+  useEffect(()=>{
+    if(!selected)return;
+    const key=conversationKey;
+    api('/api/messages?sitterId='+selected.id+(isSitter?'&guardianId='+conversationGuardian:''),actor)
+      .then(data=>{if(conversationRef.current===key)setMessages(data.messages)})
+      .catch(e=>{if(conversationRef.current===key)setError(e.message)});
+  },[conversationKey]);
+  const invalidate=()=>{guard.current.invalidate();setEstimate(invalidateEstimate<Quote>());setRequestOp(id());setCalculating(false)};
+  const updateConditions=(next:Conditions)=>{invalidate();searchEpoch.current++;setSearching(false);setConditions(next);setSitters([]);setSearched(false);setError('');setNotice('条件を変更しました。概算と確認チェックを更新してください。')};
+  const updateFilters=(next:Filters)=>{invalidate();searchEpoch.current++;setSearching(false);setFilters(next);setSitters([]);setSearched(false);setError('');setNotice('')};
+  const switchActor=(next:string)=>{invalidate();searchEpoch.current++;setSearching(false);actorRef.current=next;conversationRef.current='';setActor(next);setSelected(null);setMessages([]);setRequests([]);setSitters([]);setSearched(false);setTransport('');setTab('search');setError('');setNotice('');setMessageOp(id())};
+  const openSitter=(sitter:Sitter,guardian='guardian-demo')=>{
+    invalidate();setSelected(sitter);setMessages([]);setConversationGuardian(isSitter?guardian:actor);setTransport('');setTab('consult');setError('');setNotice('');setMessageOp(id());
+  };
+  const search=async()=>{
+    setError('');setNotice('');setSitters([]);setSearched(false);
+    const reason=conditionError(conditions);if(reason){setError(reason);return}
+    const epoch=++searchEpoch.current;setSearching(true);
+    try {
+      const query=new URLSearchParams({...filters,start:payload.start,end:payload.end,children:JSON.stringify(children),serviceType:'normal'});
+      const data=await api('/api/search?'+query,actor);
+      if(searchEpoch.current===epoch){setSitters(data.sitters);setSearched(true)}
+    }catch(e:any){if(searchEpoch.current===epoch)setError(e.message)}
+    finally{if(searchEpoch.current===epoch)setSearching(false)}
+  };
+  const sendMessage=async()=>{
+    if(!selected)return;
+    const key=conversationKey;setError('');setSending(true);
+    try {
+      const data=await api('/api/messages',actor,{method:'POST',body:JSON.stringify({sitterId:selected.id,guardianId:isSitter?conversationGuardian:undefined,body:message,operationId:messageOp})});
+      if(conversationRef.current===key){setMessages(old=>old.some(m=>m.id===data.message.id)?old:[...old,data.message]);setMessage('');setMessageOp(id());setNotice('相談を送信しました。チャットだけでは予約は成立しません。')}
+    }catch(e:any){if(conversationRef.current===key)setError(e.message)}finally{setSending(false)}
+  };
+  const getQuote=async()=>{
+    if(!selected)return;
+    invalidate();setError('');setNotice('');
+    const reason=conditionError(conditions);if(reason){setError(reason);return}
+    const key=currentKey,ticket=guard.current.begin(key);setCalculating(true);
+    try {
+      const data=await api('/api/quotes',actor,{method:'POST',body:JSON.stringify(payload)});
+      if(guard.current.isCurrent(ticket,contextRef.current)){setEstimate({...invalidateEstimate<Quote>(),quote:data.quote,quoteKey:key});setTab('request')}
+    }catch(e:any){if(guard.current.isCurrent(ticket,contextRef.current))setError(e.message)}
+    finally{if(guard.current.isCurrent(ticket,contextRef.current))setCalculating(false)}
+  };
+  const submitRequest=async()=>{
+    if(!canSubmitEstimate(estimate,currentKey)){setError('最新の概算・交通費提案額・総支払額と取消条件を確認してください。');return}
+    const key=currentKey;setError('');setSending(true);
+    try {
+      const data=await api('/api/requests',actor,{method:'POST',body:JSON.stringify({...payload,acceptCancellation:estimate.acceptCancellation,acceptTransport:estimate.acceptTransport,operationId:requestOp})});
+      if(contextRef.current===key){setRequests(old=>old.some(r=>r.id===data.request.id)?old:[...old,data.request]);setTab('requests');setNotice('正式依頼を送信しました。シッターが条件を確認して承認すると成立します。');invalidate()}
+    }catch(e:any){if(contextRef.current===key)setError(e.message)}finally{setSending(false)}
+  };
+  const respond=async(request:CareRequest,action:'approve'|'decline')=>{
+    setError('');setSending(true);const target=actor,key=request.id+':'+action;
+    const operationId=actionOps.current[key]||(actionOps.current[key]=id());
+    try {
+      await api('/api/requests/'+request.id+'/'+action,actor,{method:'POST',body:JSON.stringify({operationId,...(action==='approve'&&request.transportProposal?{acknowledgeTransport:acknowledged[request.id]===true}:{})})});
+      if(actorRef.current===target){setNotice(action==='approve'?'依頼条件と料金を確定し、予約が成立しました。':'依頼を辞退しました。');await refresh(target)}
+    }catch(e:any){if(actorRef.current===target)setError(e.message)}finally{setSending(false)}
+  };
+  const register=async(role:'guardian'|'sitter')=>{
+    const name=prompt('合成用の表示名を入力してください');if(!name)return;
+    try {const data=await api('/api/register',actor,{method:'POST',body:JSON.stringify({role,name})});await refresh();switchActor(data.user.id);setNotice(data.notice)}catch(e:any){setError(e.message)}
+  };
+  const title=tab==='search'?(isSitter?'シッターの掲載を見る':'シッターを探す'):tab==='consult'?(selected?.name+'さんに相談'):tab==='request'?'保育料の概算を確認':tab==='requests'?(isSitter?'届いた依頼を確認':'予約・依頼を確認'):'合成デモに登録';
+  const validEstimate=estimate.quote&&estimate.quoteKey===currentKey?estimate.quote:null;
+  return <main className="shell">
+    <div className="notice">ローカル合成デモです。実在の個人情報・連絡先・身分証・医療情報・決済情報を入力しないでください。</div>
+    <header className="head"><div><p className="brand">おうち保育</p><p className="small">選んで、相談して、条件を確定する。</p></div><div className="actor"><label htmlFor="actor">デモ利用者を切替（認証ではありません）</label><select id="actor" value={actor} onChange={e=>switchActor(e.target.value)}>{users.map(user=><option key={user.id} value={user.id}>{user.name} / {user.role==='guardian'?'保護者':'シッター'}</option>)}</select></div></header>
+    <nav className="tabs" aria-label="画面">
+      <button aria-current={tab==='search'?'page':undefined} onClick={()=>setTab('search')}>検索</button>
+      {selected&&<><button aria-current={tab==='consult'?'page':undefined} onClick={()=>setTab('consult')}>相談</button><button aria-current={tab==='request'?'page':undefined} onClick={()=>setTab('request')}>概算・正式依頼</button></>}
+      <button aria-current={tab==='requests'?'page':undefined} onClick={()=>setTab('requests')}>予約一覧</button><button aria-current={tab==='account'?'page':undefined} onClick={()=>setTab('account')}>登録</button>
+    </nav>
+    <h1>{title}</h1>
+    {selected&&(tab==='consult'||tab==='request')&&<p className="selected-name">相談相手：{selected.name}</p>}
+    {error&&<div className="error" role="alert" tabIndex={-1} ref={errorRef}>{error}</div>}
+    {notice&&<p className="success" role="status">{notice}</p>}
+    {tab==='search'&&<>
+      <form onSubmit={e=>{e.preventDefault();search()}}><div className="search-conditions"><RequestConditions prefix="search" value={conditions} onChange={updateConditions}/><SitterFilters value={filters} onChange={updateFilters}/></div><div className="search-action"><button disabled={!!conditionError(conditions)||searching} type="submit">{searching?'検索中…':'この条件でシッターを探す'}</button><p className="small">人数・年齢・空き時間の条件を確認して候補を表示します。</p></div></form>
+      <section aria-label="検索結果" aria-live="polite"><div className="result-heading"><h2>条件に合うシッター</h2>{searched&&<span>{sitters.length}人</span>}</div>
+        {!searched&&!searching&&<p className="empty">お子さま・依頼日時とシッターの希望条件を入力して検索してください。</p>}
+        {searched&&!sitters.length&&<div className="empty"><h3>この条件に合うシッターはいません</h3><p>入力した条件は有効です。日時や地域・資格・時給上限を変えて検索してください。</p></div>}
+        <div className="grid">{sitters.map(sitter=><article className="card sitter" key={sitter.id}><span className="tag">合成審査確認済み</span><h3>{sitter.name}</h3><p className="price">{yen(sitter.rate)}<span> / 1時間・1人</span></p><dl className="metadata"><dt>対応地域</dt><dd>{sitter.region}</dd><dt>対応年齢</dt><dd>{ageLabel(sitter.ageMonths[0])}〜{ageLabel(sitter.ageMonths[1])}</dd><dt>資格</dt><dd>{sitter.qualifications.join('・')}</dd><dt>同時に預かれる子どもの人数</dt><dd>最大{sitter.capacity}人（条件付き）</dd></dl><p className="small">このサービスの対象：小学3年生の年度末まで。年齢・人数により個別の適合確認が必要です。</p>{(!isSitter||actor===sitter.id)&&<button onClick={()=>openSitter(sitter)}>{isSitter?'保護者との相談を開く':'このシッターに相談'}</button>}</article>)}</div>
+      </section>
+    </>}
+    {tab==='consult'&&selected&&<section className="consult-layout"><div className="card conversation"><h2>相談メッセージ</h2><p className="small">相談だけでは予約は成立しません。日時・お子さま・合理的な往復経路の交通費実費を確認しましょう。</p>
+      {isSitter&&<label>会話する保護者<select value={conversationGuardian} onChange={e=>{setMessages([]);setConversationGuardian(e.target.value);setMessageOp(id())}}>{users.filter(u=>u.role==='guardian').map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select></label>}
+      <div className="chat" aria-label="相談履歴" aria-live="polite">{!messages.length&&<p className="small">まだメッセージはありません。合成の相談内容を送信できます。</p>}{messages.map(m=><div className={'bubble '+(m.authorId===actor?'mine':'')} key={m.id}>{m.body}<div className="small">{m.authorId===actor?'あなた':'相手'} / {displayTime(m.createdAt)}</div></div>)}</div>
+      <form className="form" onSubmit={e=>{e.preventDefault();sendMessage()}}><label htmlFor="message">相談内容<textarea id="message" value={message} onChange={e=>{setMessage(e.target.value);setMessageOp(id())}}/></label><button disabled={!message.trim()||sending}>相談を送信</button></form>
+      </div><aside className="condition-editor"><RequestConditions prefix="consult" value={conditions} onChange={updateConditions}/><div className="card"><p className="small">条件を変更しても会話は残ります。変更後は概算・交通費・取消条件を再確認してください。</p><button onClick={getQuote} disabled={!!conditionError(conditions)||calculating}>{calculating?'計算中…':'保育料の概算を確認'}</button></div></aside></section>}
+    {tab==='request'&&selected&&<section className="estimate-layout"><div className="card"><h2>{validEstimate?.transport===null?'保育料の概算（交通費を除く）':'料金・交通費の提案を確認'}</h2>{validEstimate?<PriceBreakdown quote={validEstimate} sitter={isSitter}/>:<p>条件を変更しました。最新の概算を計算してください。</p>}<p className="small">税区分・実請求は含まれない合成デモの概算です。</p>
+      <fieldset className="transport form"><legend>相談した交通費を提案</legend><p className="small">合理的な往復経路の実費を相談し、提案額を入力してください。無料で合意する場合のみ0円を入力します。シッターの承認で確定します。</p><label htmlFor="transport">交通費提案額（円）<input id="transport" type="number" min="0" step="1" value={transport} onChange={e=>{invalidate();setTransport(e.target.value);setError('')}} placeholder="相談後に入力"/></label><button className="secondary" onClick={getQuote} disabled={calculating||!!conditionError(conditions)}>{calculating?'計算中…':'最新の金額を計算'}</button></fieldset>
+      <p className="small">取消条件：日本時間の利用開始日基準で前々日以前0%、前日50%、当日100%の保育料案です。交通費は返金不能な発生済み実費のみ。成立後の取消・精算はこのデモでは実行できません。</p>
+      {!isSitter&&<div className="consents"><label><input type="checkbox" checked={estimate.acceptTransport} disabled={!validEstimate||validEstimate.transport===null} onChange={e=>setEstimate({...estimate,acceptTransport:e.target.checked})}/>交通費提案額{validEstimate?.transport!==null&&validEstimate?yen(validEstimate.transport):'（未確定）'}と総支払額{validEstimate?.guardianTotal!==null&&validEstimate?yen(validEstimate.guardianTotal):'（未確定）'}を確認しました</label><label><input type="checkbox" checked={estimate.acceptCancellation} disabled={!validEstimate} onChange={e=>setEstimate({...estimate,acceptCancellation:e.target.checked})}/>ローカルデモの取消条件に同意します</label><button onClick={submitRequest} disabled={!canSubmitEstimate(estimate,currentKey)||sending}>正式依頼を送信</button></div>}
+      </div><aside className="condition-editor"><RequestConditions prefix="estimate" value={conditions} onChange={updateConditions}/><div className="card"><h2>依頼先</h2><p>{selected.name} / 通常保育</p><button className="secondary" onClick={()=>setTab('consult')}>相談に戻る</button></div></aside></section>}
+    {tab==='requests'&&<section className="card"><h2>{isSitter?'届いた正式依頼':'予約・正式依頼'}</h2><p className="small">承認待ちは枠を占有しません。期限・空き時間・移動余裕を承認時に再確認します。</p><div className="list">{requests.map(request=><article className={'request '+request.status} key={request.id}><h3>{request.status==='pending'?'承認待ち':request.status==='confirmed'?'成立':request.status==='declined'?'辞退':'失効'}</h3><p>相手：{users.find(u=>u.id===(isSitter?request.guardianId:request.sitterId))?.name}</p><p>{displayTime(request.start)} 〜 {displayTime(request.end)}</p><p>お子さま：{request.children?.map((child,i)=>(i+1)+'人目 '+child.birthDate+'生まれ').join('、')||'保存済みの条件'}</p><PriceBreakdown quote={request.quote} sitter={isSitter}/><p className="small">承認期限：{displayTime(request.expiresAt)}</p>{isSitter&&request.status==='pending'&&<div className="consents">{request.transportProposal&&<label><input type="checkbox" checked={acknowledged[request.id]||false} onChange={e=>setAcknowledged({...acknowledged,[request.id]:e.target.checked})}/>日時・お子さま・交通費提案額{yen(request.quote.transport!)}を含む依頼条件を確認しました</label>}<div className="actions"><button onClick={()=>respond(request,'approve')} disabled={sending||!!request.transportProposal&&!acknowledged[request.id]}>依頼を承認して成立</button><button className="secondary" onClick={()=>respond(request,'decline')} disabled={sending}>辞退</button></div></div>}</article>)}{!requests.length&&<p className="empty">まだ予約・正式依頼はありません。</p>}</div></section>}
+    {tab==='account'&&<section className="grid"><div className="card"><h2>保護者の合成登録</h2><p>実情報なしで表示名だけを登録します。</p><button onClick={()=>register('guardian')}>合成保護者を登録</button></div><div className="card"><h2>シッターの合成登録</h2><p>資格・研修・届出・初回保険の合成確認待ちとして登録します。自己申告で掲載や受付はできません。</p><button onClick={()=>register('sitter')}>合成シッターを登録</button></div></section>}
+    <footer className="footer">ローカル合成デモ ・ 本人確認・メール・決済・病児対応なし</footer>
+  </main>;
 }
 createRoot(document.getElementById('root')!).render(<App/>);

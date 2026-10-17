@@ -1,10 +1,7 @@
 # Status
-- task: docs/tasks/INITIAL-MVP.md
-- state_version: 8
-- state: complete
-- failed_submissions: 2
-- verification: docs/verification/INITIAL-VERIFICATION.md PASS
-- artifact_review: docs/review/INITIAL-ARTIFACT-REVIEW.md PASS
-- scope: initial local synthetic registration/search/chat/request/approval only
-- runtime: http://127.0.0.1:8787
-- remaining_product: production integrations and deferred workflows
+- task: docs/tasks/UX-REFRESH.md
+- state_version: 2
+- state: verifying
+- scope: existing local UX feedback UX01-UX09
+- trial: S01; source freeze pending
+- prior_increment: docs/tasks/INITIAL-MVP.md complete

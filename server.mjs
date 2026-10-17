@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 
-const RULE_VERSION = 'local-demo-0.1';
+const RULE_VERSION = 'local-demo-0.2-transport';
 const MAX_RATE = 10000;
 const BUFFER_MINUTES = 30;
 const loopbackHost = /^(127\.0\.0\.1|localhost)(:\d+)?$/;
@@ -31,6 +31,7 @@ const atJst = (iso) => new Date(iso);
 const validQuarter = (d) => d.getUTCMinutes()%15===0 && d.getUTCSeconds()===0 && d.getUTCMilliseconds()===0;
 function jstParts(iso) { const d=new Date(+new Date(iso)+9*3600000); return {year:d.getUTCFullYear(),month:d.getUTCMonth()+1,day:d.getUTCDate()}; }
 function childEligible(birthDate, start) {
+  if(typeof birthDate!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(birthDate))return false;
   const [year,month,day]=birthDate.split('-').map(Number), service=jstParts(start);
   const calendar=new Date(Date.UTC(year,month-1,day));
   if(!year||!month||!day||calendar.getUTCFullYear()!==year||calendar.getUTCMonth()+1!==month||calendar.getUTCDate()!==day) return false;
@@ -46,12 +47,18 @@ function ageMonths(birthDate, start) {
 }
 function parseSlot(input, clock=now) {
   const {start,end,serviceType='normal', medical=false, medication=false, sick=false, postIllness=false, children=[]}=input;
+  const validTimestamp=value=>{
+    if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{3})?)?(Z|[+-]\d{2}:\d{2})$/.test(value))return false;
+    const [year,month,day]=value.slice(0,10).split('-').map(Number), date=new Date(Date.UTC(year,month-1,day));
+    return date.getUTCFullYear()===year&&date.getUTCMonth()+1===month&&date.getUTCDate()===day;
+  };
+  if(!validTimestamp(start)||!validTimestamp(end))err(422,'INVALID_TIME','実在する開始・終了日時を指定してください。');
   const a=atJst(start), b=atJst(end);
   if (serviceType!=='normal' || medical || medication || sick || postIllness) err(422,'SERVICE_UNAVAILABLE','病児・病後児・投薬補助はこのデモでは受付できません。');
   if (!start || !end || Number.isNaN(+a)||Number.isNaN(+b)||a<=clock()||b<=a) err(422,'INVALID_TIME','未来の開始・終了時刻を指定してください。');
   if (!validQuarter(a)||!validQuarter(b)||b-a<3*3600000) err(422,'INVALID_DURATION','通常保育は15分刻みで最低3時間です。');
   if (!Array.isArray(children)||children.length<1||children.length>3) err(422,'INVALID_CHILDREN','対象児は1〜3人です。');
-  for (const c of children) if (!c.birthDate||!['保護者の子','きょうだい'].includes(c.relation)||c.care!=='通常保育'||!childEligible(c.birthDate,start)) err(422,'CHILD_NOT_ELIGIBLE','対象児の年齢・関係・保育内容を確認してください。');
+  for (const c of children) if (!c||!c.birthDate||!['保護者の子','きょうだい'].includes(c.relation)||c.care!=='通常保育'||!childEligible(c.birthDate,start)) err(422,'CHILD_NOT_ELIGIBLE','対象児の年齢・関係・保育内容を確認してください。');
   return { start:a.toISOString(), end:b.toISOString(), children };
 }
 function nightHours(start,end) {
@@ -68,7 +75,7 @@ function nightHours(start,end) {
 export function quote(input, sitter, clock=now) {
   const slot=parseSlot(input,clock);
   if (!isVerified(sitter)) err(422,'SITTER_NOT_READY','このシッターは合成審査確認前です。');
-  if(!Number.isInteger(sitter.rate)||sitter.rate<=0||sitter.rate>MAX_RATE||!Number.isInteger(sitter.transport)||sitter.transport<0) err(500,'INVALID_SITTER_PRICING','シッターの合成料金設定が不正です。');
+  if(!Number.isInteger(sitter.rate)||sitter.rate<=0||sitter.rate>MAX_RATE) err(500,'INVALID_SITTER_PRICING','シッターの合成料金設定が不正です。');
   const count=slot.children.length;
   if (count>sitter.capacity || (count>=2&&!sitter.multiScenario)) err(422,'MULTI_CONDITION_UNMET','この人数条件は合成適合シナリオ外です。');
   for(const c of slot.children) {
@@ -80,8 +87,11 @@ export function quote(input, sitter, clock=now) {
   const hours=(atJst(slot.end)-atJst(slot.start))/3600000;
   const base=sitter.rate*count*hours;
   const night=sitter.rate*count*nightHours(slot.start,slot.end)*.2;
-  const service=Math.floor(base+night), fee=Math.floor(service*.15), transport=sitter.transport;
-  return {slot, quote:{rate:sitter.rate, children:count, hours, base, nightSurcharge:night, service, fee, takeHome:service-fee, transport, guardianTotal:service+transport, currency:'JPY', note:'税区分・実請求は含まれないローカルデモ見積りです。'}};
+  const transport=input.transportAmount===undefined?null:input.transportAmount;
+  if(transport!==null&&(!Number.isInteger(transport)||transport<0)||input.transportAmount===null)
+    err(422,'INVALID_TRANSPORT','交通費は0円以上の整数で明示してください。');
+  const service=Math.floor(base+night), fee=Math.floor(service*.15);
+  return {slot, quote:{rate:sitter.rate, children:count, hours, base, nightSurcharge:night, service, fee, takeHome:service-fee, transport, transportStatus:transport===null?'pending':'proposed', guardianTotal:transport===null?null:service+transport, currency:'JPY', note:'税区分・実請求は含まれないローカルデモ見積りです。'}};
 }
 function withinAvailability(sitter,start,end) {
   const a=new Date(+new Date(start)+9*3600000), b=new Date(+new Date(end)+9*3600000);
@@ -140,10 +150,12 @@ export class Store {
   async close(){ if(this.lockHandle){ await this.lockHandle.close(); await unlink(this.lock).catch(()=>{}); this.lockHandle=null; } }
 }
 function listSitters(state, query, clock) {
-  const children=query.children?JSON.parse(query.children):[];
+  let children=[];
+  try { children=query.children?JSON.parse(query.children):[]; } catch { err(422,'INVALID_CHILDREN','対象児の形式が不正です。'); }
   const start=query.start, end=query.end, maxRate=Number(query.maxRate||MAX_RATE);
   if(query.medical==='true'||query.medication==='true'||query.sick==='true'||query.postIllness==='true'||query.serviceType&&query.serviceType!=='normal') err(422,'SERVICE_UNAVAILABLE','病児・病後児・投薬補助はこのデモでは受付できません。');
-  if(!start||!end||!children.length) err(422,'SEARCH_CONDITIONS_REQUIRED','日時と対象児を指定してください。');
+  if(!start||!end||!Array.isArray(children)||!children.length) err(422,'SEARCH_CONDITIONS_REQUIRED','日時と対象児を指定してください。');
+  parseSlot({start,end,children,serviceType:query.serviceType||'normal'},clock);
   return state.users.filter(s=>{
     if(s.role!=='sitter'||!isVerified(s)||s.region!==query.region||s.rate>maxRate||(query.qualification&&!s.qualifications.includes(query.qualification))) return false;
     try { quote({start,end,children,serviceType:query.serviceType||'normal'},s,clock); return withinAvailability(s,start,end)&&!conflict(state.bookings,s.id,start,end); } catch { return false; }
@@ -169,11 +181,19 @@ export function createHandler(store, clock=now) {
       if(req.method==='POST'&&url.pathname==='/api/register') { const input=await body(req); const r=await store.mutate(s=>{if(!['guardian','sitter'].includes(input.role)||!input.name)err(422,'INVALID_REGISTRATION','役割と表示名を入力してください。'); const id='local-'+randomUUID(); const u=input.role==='guardian'?{id,role:'guardian',name:input.name+'（合成）',region:'東京',children:[]}:{id,role:'sitter',name:input.name+'（合成）',region:'東京',rate:1800,transport:500,qualifications:[],ageMonths:[12,120],capacity:1,multiScenario:false,review:{qualification:false,training:false,notification:false,initialInsurance:false},available:false};s.users.push(u);return u;}); return send(res,201,{user:r,notice:input.role==='sitter'?'新規シッターは合成確認待ちのため検索・受付できません。':'ローカル合成登録を完了しました。'}); }
       if(req.method==='POST'&&url.pathname==='/api/messages') { const input=await body(req); const result=await store.mutate(s=>{const {user,sitter}=participant(s,actor,input.sitterId); if(!input.body?.trim())err(422,'EMPTY_MESSAGE','相談内容を入力してください。'); const fingerprint=JSON.stringify({to:input.sitterId,guardianId:input.guardianId||actor,body:input.body}); const prior=operation(s,actor,input.operationId,fingerprint,null);if(prior)return prior; const guardianId=user.role==='guardian'?actor:input.guardianId; if(user.role==='sitter'&&!guardianId)err(422,'GUARDIAN_REQUIRED','返信先を指定してください。'); const m={id:randomUUID(),sitterId:sitter.id,guardianId,authorId:actor,body:input.body.trim(),createdAt:clock().toISOString()};s.messages.push(m);s.operations[actor+':'+input.operationId].result=m;return m;});return send(res,201,{message:result}); }
       if(req.method==='POST'&&url.pathname==='/api/quotes') { const input=await body(req); const sitter=store.state.users.find(x=>x.id===input.sitterId); if(!sitter)err(404,'SITTER_NOT_FOUND','シッターが見つかりません。'); return send(res,200,quote(input,sitter,clock)); }
-      if(req.method==='POST'&&url.pathname==='/api/requests') { const input=await body(req); const result=await store.mutate(s=>{const guardian=s.users.find(x=>x.id===actor&&x.role==='guardian');if(!guardian)err(403,'GUARDIAN_ONLY','保護者だけが正式依頼できます。');const sitter=s.users.find(x=>x.id===input.sitterId);if(!sitter)err(404,'SITTER_NOT_FOUND','シッターが見つかりません。');if(!input.acceptCancellation)err(422,'CANCELLATION_CONSENT_REQUIRED','キャンセル条件への同意が必要です。');const fingerprint=JSON.stringify({...input,guardianId:actor});const prior=operation(s,actor,input.operationId,fingerprint,null);if(prior)return prior;const q=quote(input,sitter,clock);if(!withinAvailability(sitter,q.slot.start,q.slot.end))err(422,'OUTSIDE_AVAILABILITY','合成シッターの空き時間外です。');if(conflict(s.bookings,sitter.id,q.slot.start,q.slot.end))err(409,'SLOT_CONFLICT','成立済み予約と移動余裕が競合します。');const r={id:randomUUID(),guardianId:actor,sitterId:sitter.id,status:'pending',createdAt:clock().toISOString(),start:q.slot.start,end:q.slot.end,children:q.slot.children,serviceType:input.serviceType||'normal',medical:!!input.medical,medication:!!input.medication,sick:!!input.sick,postIllness:!!input.postIllness,expiresAt:'',quote:q.quote,ruleVersion:RULE_VERSION,cancellation:'取消条件（ローカルデモ）: 実行・精算は未実装です。日本時間の利用開始日基準で、前々日以前0%、前日50%、当日100%を保育料の取消料率案とし、返金不能な発生済み実費だけを交通費対象とします。取消料も運営15%・シッター85%の案です。'};r.expiresAt=expiry(r);s.requests.push(r);s.operations[actor+':'+input.operationId].result=r;return r;});return send(res,201,{request:result}); }
+      if(req.method==='POST'&&url.pathname==='/api/requests') { const input=await body(req); const result=await store.mutate(s=>{const guardian=s.users.find(x=>x.id===actor&&x.role==='guardian');if(!guardian)err(403,'GUARDIAN_ONLY','保護者だけが正式依頼できます。');const sitter=s.users.find(x=>x.id===input.sitterId);if(!sitter)err(404,'SITTER_NOT_FOUND','シッターが見つかりません。');const fingerprint=JSON.stringify({...input,guardianId:actor});
+        const prior=operation(s,actor,input.operationId,fingerprint,null);if(prior)return prior;
+        if(input.acceptCancellation!==true)err(422,'CANCELLATION_CONSENT_REQUIRED','キャンセル条件への同意が必要です。');
+        if(input.transportAmount===undefined)err(422,'TRANSPORT_REQUIRED','相談した交通費提案額を入力してください。');
+        const q=quote(input,sitter,clock);
+        if(input.acceptTransport!==true)err(422,'TRANSPORT_CONSENT_REQUIRED','交通費提案額と総支払額の確認が必要です。');if(!withinAvailability(sitter,q.slot.start,q.slot.end))err(422,'OUTSIDE_AVAILABILITY','合成シッターの空き時間外です。');if(conflict(s.bookings,sitter.id,q.slot.start,q.slot.end))err(409,'SLOT_CONFLICT','成立済み予約と移動余裕が競合します。');const r={id:randomUUID(),guardianId:actor,sitterId:sitter.id,status:'pending',createdAt:clock().toISOString(),start:q.slot.start,end:q.slot.end,children:q.slot.children,serviceType:input.serviceType||'normal',medical:!!input.medical,medication:!!input.medication,sick:!!input.sick,postIllness:!!input.postIllness,expiresAt:'',quote:q.quote,ruleVersion:RULE_VERSION,transportProposal:{amount:q.quote.transport,guardianAccepted:true},cancellation:'取消条件（ローカルデモ）: 実行・精算は未実装です。日本時間の利用開始日基準で、前々日以前0%、前日50%、当日100%を保育料の取消料率案とし、返金不能な発生済み実費だけを交通費対象とします。取消料も運営15%・シッター85%の案です。'};r.expiresAt=expiry(r);s.requests.push(r);s.operations[actor+':'+input.operationId].result=r;return r;});return send(res,201,{request:result}); }
       const decline=url.pathname.match(/^\/api\/requests\/([^/]+)\/decline$/);
       if(req.method==='POST'&&decline) { const input=await body(req); const result=await store.mutate(s=>{expireRequests(s,clock);const r=s.requests.find(x=>x.id===decline[1]);if(!r)err(404,'REQUEST_NOT_FOUND','依頼が見つかりません。');if(r.sitterId!==actor)err(403,'SITTER_ONLY','依頼先シッターだけが辞退できます。');const prior=operation(s,actor,input.operationId,JSON.stringify({request:r.id,action:'decline'}),null);if(prior)return prior;if(r.status!=='pending')err(409,'REQUEST_NOT_PENDING','この依頼は承認待ちではありません。');r.status='declined';s.operations[actor+':'+input.operationId].result=r;return r;});return send(res,200,{request:result}); }
       const approve=url.pathname.match(/^\/api\/requests\/([^/]+)\/approve$/);
-      if(req.method==='POST'&&approve) { const input=await body(req);const result=await store.mutate(s=>{expireRequests(s,clock);const r=s.requests.find(x=>x.id===approve[1]);if(!r)err(404,'REQUEST_NOT_FOUND','依頼が見つかりません。');if(r.sitterId!==actor)err(403,'SITTER_ONLY','依頼先シッターだけが承認できます。');const fingerprint=JSON.stringify({request:r.id});const prior=operation(s,actor,input.operationId,fingerprint,null);if(prior)return prior;if(r.status==='expired')err(409,'REQUEST_EXPIRED','この依頼は期限切れです。');if(r.status!=='pending')err(409,'REQUEST_NOT_PENDING','この依頼は承認待ちではありません。');const sitter=s.users.find(x=>x.id===actor);quote({start:r.start,end:r.end,children:r.children,serviceType:r.serviceType,medical:r.medical,medication:r.medication,sick:r.sick,postIllness:r.postIllness},sitter,clock);if(!withinAvailability(sitter,r.start,r.end))err(422,'OUTSIDE_AVAILABILITY','合成シッターの空き時間外です。');if(conflict(s.bookings,actor,r.start,r.end))err(409,'SLOT_CONFLICT','成立済み予約と移動余裕が競合します。');r.status='confirmed';const b={id:randomUUID(),requestId:r.id,sitterId:actor,guardianId:r.guardianId,status:'confirmed',start:r.start,end:r.end,bufferMinutes:BUFFER_MINUTES,quote:r.quote,ruleVersion:r.ruleVersion};s.bookings.push(b);s.operations[actor+':'+input.operationId].result={request:r,booking:b};return {request:r,booking:b};});return send(res,200,result); }
+      if(req.method==='POST'&&approve) { const input=await body(req);const result=await store.mutate(s=>{expireRequests(s,clock);const r=s.requests.find(x=>x.id===approve[1]);if(!r)err(404,'REQUEST_NOT_FOUND','依頼が見つかりません。');if(r.sitterId!==actor)err(403,'SITTER_ONLY','依頼先シッターだけが承認できます。');const usesTransportConfirmation=!!r.transportProposal;
+        const fingerprint=JSON.stringify(usesTransportConfirmation?{request:r.id,acknowledgeTransport:input.acknowledgeTransport}:{request:r.id});
+        const prior=operation(s,actor,input.operationId,fingerprint,null);if(prior)return prior;
+        if(usesTransportConfirmation&&input.acknowledgeTransport!==true)err(422,'TRANSPORT_ACKNOWLEDGEMENT_REQUIRED','交通費提案額を含む依頼条件を確認してください。');if(r.status==='expired')err(409,'REQUEST_EXPIRED','この依頼は期限切れです。');if(r.status!=='pending')err(409,'REQUEST_NOT_PENDING','この依頼は承認待ちではありません。');const sitter=s.users.find(x=>x.id===actor);quote({start:r.start,end:r.end,children:r.children,serviceType:r.serviceType,medical:r.medical,medication:r.medication,sick:r.sick,postIllness:r.postIllness},sitter,clock);if(!withinAvailability(sitter,r.start,r.end))err(422,'OUTSIDE_AVAILABILITY','合成シッターの空き時間外です。');if(conflict(s.bookings,actor,r.start,r.end))err(409,'SLOT_CONFLICT','成立済み予約と移動余裕が競合します。');if(usesTransportConfirmation)r.transportProposal.sitterAcknowledged=true;r.status='confirmed';const b={id:randomUUID(),requestId:r.id,sitterId:actor,guardianId:r.guardianId,status:'confirmed',start:r.start,end:r.end,bufferMinutes:BUFFER_MINUTES,quote:r.quote,children:r.children,serviceType:r.serviceType,transportProposal:r.transportProposal,ruleVersion:r.ruleVersion};s.bookings.push(b);s.operations[actor+':'+input.operationId].result={request:r,booking:b};return {request:r,booking:b};});return send(res,200,result); }
       if(req.method==='POST'&&url.pathname==='/api/testing/fail-write') return send(res,403,{code:'NOT_AVAILABLE',message:'本番相当の変更APIはありません。'});
       if(req.method!=='GET'&&url.pathname.startsWith('/api/')) err(404,'NOT_IMPLEMENTED','この変更APIは実装されていません。');
       const file=url.pathname==='/'?'index.html':url.pathname.slice(1);
