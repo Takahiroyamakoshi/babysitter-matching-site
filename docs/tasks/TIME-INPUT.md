@@ -1,7 +1,7 @@
 # Quarter-hour input correction
 - id: time-input
-- state: verifying
-- state_version: 2
+- state: complete
+- state_version: 3
 - trial: S01
 - failed_submissions: 0
 - authorization: user requested implementation of date plus quarter-hour-only time selection in search/consult/estimate.
@@ -9,3 +9,8 @@
 - acceptance: separate labeled date and native time select with 96 quarter-hour options; no free minute input; date/time changes retain counterpart; all three screens; desktop/mobile readable; build/typecheck plus focused regression and browser check; independent artifact review.
 - base: eeb5bc4d413e5025f6a527e8da5e0a9bd68214ab
 - external_operations: no push/PR/deploy/payment/email; local synthetic only.
+
+- source_revision: ad05ad16008ae03bbe36eb3591eb7532d988884d
+- result: typecheck/build/17 existing tests PASS; parent CUA3screens/dateclear/min3h/invalidation/375px PASS; independent artifact review PASS.
+- evidence: docs/verification/TIME-INPUT.md; docs/reviews/TIME-INPUT.md; evidence/time-input/S01/
+- remaining: none within this correction; no external operations.
