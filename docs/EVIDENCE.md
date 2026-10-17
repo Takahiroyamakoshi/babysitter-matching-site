@@ -51,3 +51,8 @@ This is completion of the first local synthetic increment, not of the complete m
 - docs/verification/LOCAL-LIFECYCLE.md; docs/reviews/LOCAL-LIFECYCLE.md PASS, blockers0.44 automated tests; independent API/domain/focused consent checks/integrated smoke; parent CUA375/1280 including actual communication failure/retry and role-specific amounts. Counts are separate evidence units.
 - S01F01 consent snapshot/hash and S02F02 sitter proceeds display resolved; original failures retained.
 - Preview http://127.0.0.1:8796 uses isolated synthetic data/clock. No actual delivery/charge/payout/auth/deployment; G10/G16/G17b full tasks and overall product remain incomplete.
+
+## Japan Connect refund recovery research (2026-10-17)
+- Research/proposal: docs/research/JP-REFUND-RECOVERY.md. Public primary-source review only; connected self-funding exists, but Japan/account-specific eligibility and fee-availability timing require formal confirmation.
+- External contact, account access, runtime/financial tests and real transfers were not performed. G05/D1 are not closed by this research.
+- Independent proposal audit: docs/research/JP-REFUND-RECOVERY-AUDIT.md; v0.2 A01 corrected. This is not Japan account eligibility, collection guarantee or funds-flow test approval.
