@@ -1,6 +1,6 @@
 # Status
 - task: docs/tasks/INITIAL-MVP.md
-- state_version: 4
-- state: verifying
-- failed_submissions: 1
-- implementation_submission: d622eb9db93dc774cbf43accf9837d795d061d96
+- state_version: 5
+- state: correcting
+- failed_submissions: 2
+- evidence: evidence/initial-verification/S02/
